@@ -3,5 +3,18 @@
     "calva.paredit.strictPreventUnmatchedClosingBracket": true,
     "editor.formatOnPaste": true,
     "editor.formatOnSave": true,
-    "editor.formatOnType": true
+    "editor.formatOnType": true,
+    "calva.replConnectSequences": [
+        {
+            "name": "Srvc Server",
+            "projectType": "deps.edn",
+            "menuSelections": {
+                "cljAliases": [
+                    "dev"
+                ]
+            },
+            "afterCLJReplJackInCode": "((requiring-resolve 'srvc.server/start!))",
+            "cljsType": "none"
+        }
+    ]
 }
