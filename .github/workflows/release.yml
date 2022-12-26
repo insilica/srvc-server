@@ -57,7 +57,7 @@ jobs:
           ~/.gitlibs
           ~/.m2/repository
     - name: Install Nix
-      uses: cachix/install-nix-action@v17
+      uses: cachix/install-nix-action@v18
 
     - name: Cache Nix store
       id: nix-cache
@@ -79,7 +79,7 @@ jobs:
       run: nix-shell --run "clojure -T:build uberjar :snapshot false"
 
     - name: Upload release uberjar
-      uses: actions/upload-release-asset@v1.0.1
+      uses: actions/upload-release-asset@v1.0.2
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
@@ -90,4 +90,3 @@ jobs:
 
     - run: |
         nix-store --dump-db > ~/nix-db-dump
-      if: steps.nix-cache.outputs.cache-hit != 'true'
