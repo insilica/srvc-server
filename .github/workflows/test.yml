@@ -1,0 +1,74 @@
+name: Test
+
+on:
+  push:
+    paths-ignore:
+      - '**.md'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 1
+
+    - name: Restore cached Nix store
+      id: nix-cache-restore
+      uses: john-shaffer/cache/restore@main
+      with:
+        key: nix-${{ github.repository }}-${{ hashFiles('**.nix') }}
+        restore-keys: |
+          nix-${{ github.repository }}-
+        path: |
+          /nix/store
+          /nix/var/nix/db/db.sqlite
+
+    - name: Install Nix
+      uses: cachix/install-nix-action@v18
+
+    - name: Build Nix derivations
+      if: steps.nix-cache-restore.outputs.cache-hit != 'true'
+      run: |
+        nix flake check
+        nix develop -c echo OK
+        nix build
+
+    - name: Save cached Nix store
+      if: steps.nix-cache-restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v3
+      with:
+        key: nix-${{ github.repository }}-${{ hashFiles('**.nix') }}
+        path: |
+          /nix/store
+          /nix/var/nix/db/db.sqlite
+
+    - name: Restore cached Clojure dependencies
+      id: clj-cache-restore
+      uses: actions/cache/restore@v3
+      with:
+        key: clj-${{ github.repository }}-${{ hashFiles('**/deps.edn') }}
+        restore-keys: clj-${{ github.repository }}-
+        path: |
+          ~/.gitlibs
+          ~/.m2/repository
+
+    - name: Pull Clojure dependencies
+      if: steps.clj-cache-restore.outputs.cache-hit != 'true'
+      run: |
+        nix develop -c clojure -e nil
+        nix develop -c clojure -A:build -e nil
+
+    - name: Save cached Clojure dependencies
+      if: steps.clj-cache-restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v3
+      with:
+        key: clj-${{ github.repository }}-${{ hashFiles('**/deps.edn') }}
+        path: |
+          ~/.gitlibs
+          ~/.m2/repository
+
+    - name: Build uberjar
+      run: nix develop -c clojure -T:build uberjar :snapshot true
