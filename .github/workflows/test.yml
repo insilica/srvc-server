@@ -19,7 +19,7 @@ jobs:
       id: nix-cache-restore
       uses: john-shaffer/cache/restore@main
       with:
-        key: nix-${{ github.repository }}-${{ hashFiles('**.nix') }}
+        key: nix-${{ github.repository }}-${{ hashFiles('**.nix', '**/flake.lock') }}
         restore-keys: |
           nix-${{ github.repository }}-
         path: |
@@ -40,7 +40,7 @@ jobs:
       if: steps.nix-cache-restore.outputs.cache-hit != 'true'
       uses: actions/cache/save@v3
       with:
-        key: nix-${{ github.repository }}-${{ hashFiles('**.nix') }}
+        key: nix-${{ github.repository }}-${{ hashFiles('**.nix', '**/flake.lock') }}
         path: |
           /nix/store
           /nix/var/nix/db/db.sqlite
