@@ -1,6 +1,7 @@
 {:paths ["resources" "src"]
  :deps {babashka/process {:mvn/version "0.4.13"}
         buddy/buddy-hashers {:mvn/version "1.8.158"}
+        cider/cider-nrepl {:mvn/version "0.29.0"}
         clj-commons/clj-yaml {:mvn/version "1.0.26"}
         club.donutpower/system {:mvn/version "0.0.165"
                                 :exclusions [tailrecursion/cljs-priority-map]}
@@ -13,7 +14,9 @@
         metosin/muuntaja {:mvn/version "0.6.8"}
         metosin/reitit {:mvn/version "0.5.18"}
         metabase/saml20-clj {:mvn/version "2.0.2"}
+        nrepl/nrepl {:mvn/version "1.0.0"}
         org.clojure/data.json {:mvn/version "2.4.0"}
+        refactor-nrepl/refactor-nrepl {:mvn/version "3.6.0"}
         rum/rum {:mvn/version "0.12.10"
                  :exclusions [cljsjs/react cljsjs/react-dom]}}
  :aliases
