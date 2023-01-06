@@ -8,12 +8,13 @@
             [org.httpkit.server :as server]
             [reitit.ring :as rr]
             [ring.middleware.session :as session]
-            [ring.middleware.session.memory :as mem]
+            [ring.middleware.session.cookie :as cookie]
             [srvc.server.api :as api]
             [srvc.server.html :as html]
             [srvc.server.nrepl :as nrepl]
             [srvc.server.review :as review]
-            [srvc.server.saml :as saml]))
+            [srvc.server.saml :as saml])
+  (:import [java.util Base64]))
 
 (defn routes [config]
   [(html/routes config)
@@ -97,12 +98,14 @@
                  (atom {}))
         :stop (constantly nil)})
 
-(defn session-opts-component []
-  #::ds{:start (fn [_]
-                 {:cookie-attrs {:http-only true}
-                  :cookie-name "ring-session"
-                  :root "/"
-                  :store (mem/memory-store)})
+(defn session-opts-component [config]
+  #::ds{:config config
+        :start (fn [{::ds/keys [config]}]
+                 (let [k (some->> config :secret-key (.decode (Base64/getDecoder)))]
+                   {:cookie-attrs (:cookie-attrs config {:http-only true})
+                    :cookie-name (:cookie-name config "ring-session")
+                    :root (:root config "/")
+                    :store (cookie/cookie-store {:key k})}))
         :stop (constantly nil)})
 
 (defn system [env]
@@ -126,7 +129,8 @@
                     {:listen-ports (ds/local-ref [:config :proxy :listen-ports])
                      :session-opts (ds/local-ref [:session-opts])})
      :review-processes (review/review-processes-component)
-     :session-opts (session-opts-component)}}})
+     :session-opts (session-opts-component
+                    (ds/local-ref [:config :session]))}}})
 
 ;; Not thread-safe. For use by -main and at REPL
 (defn start! []
@@ -143,4 +147,6 @@
 
 (comment
   (do (stop!) (start!) nil)
-  )
+
+  ;; Generate a new session secret-key
+  (String. (.encode (Base64/getEncoder) (crypto.random/bytes 16))))
