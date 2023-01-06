@@ -139,4 +139,5 @@
   (Thread/sleep Long/MAX_VALUE))
 
 (comment
-  (do (stop!) (start!)))
+  (do (stop!) (start!) nil)
+  )
