@@ -1,5 +1,6 @@
 (ns srvc.server.review
-  (:require [babashka.fs :as fs]
+  (:require [aleph.http :as ahttp]
+            [babashka.fs :as fs]
             [babashka.process :as p]
             [clj-yaml.core :as yaml]
             [clojure.java.io :as io]
@@ -70,12 +71,20 @@
               (p/destroy-tree process))
             nil)})
 
+(defn get-connection-pool []
+  (ahttp/connection-pool
+   {:connection-options
+    {:keep-alive? false
+     :raw-stream? false}}))
+
 (defn proxy-handler [get-url session-opts]
-  (fn [request]
-    (let [request (session/session-request request session-opts)]
-      ((http-proxy/create-handler
-        {:url (get-url request)})
-       request))))
+  (let [pool (get-connection-pool)]
+    (fn [request]
+      (let [request (session/session-request request session-opts)]
+        ((http-proxy/create-handler
+          {:pool pool
+           :url (get-url request)})
+         request)))))
 
 (defn proxy-server [get-url listen-port session-opts]
   (http-proxy/start-server
