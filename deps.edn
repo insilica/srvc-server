@@ -1,5 +1,6 @@
 {:paths ["resources" "src"]
- :deps {babashka/process {:mvn/version "0.4.14"}
+ :deps {org.clojure/clojure {:mvn/version "1.11.1"}
+        babashka/process {:mvn/version "0.4.14"}
         buddy/buddy-hashers {:mvn/version "1.8.158"}
         cider/cider-nrepl {:mvn/version "0.29.0"}
         clj-commons/clj-yaml {:mvn/version "1.0.26"}
