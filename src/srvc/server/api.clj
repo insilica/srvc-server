@@ -76,12 +76,13 @@
    (let [config-file (fs/path name "sr.yaml")
          config (-> config-file fs/file slurp yaml/parse-string)
          db-file (->> config :db (fs/path name))
-         events (load-data db-file)]
-     (swap! projects assoc name
-            {:config config
-             :config-file config-file
-             :db-file db-file
-             :events events}))))
+         events (load-data db-file)
+         project {:config config
+                  :config-file config-file
+                  :db-file db-file
+                  :events events}]
+     (swap! projects assoc name project)
+     project)))
 
 (defn add-events! [projects name events]
   (let [{:keys [db-file] :as project} (load-project projects name)]
