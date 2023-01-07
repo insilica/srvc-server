@@ -2,17 +2,35 @@
   description = "srvc server";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
+    srvc.url = "github:insilica/rs-srvc";
   };
-
-  outputs = { self, nixpkgs, flake-utils, ... }:
+  outputs = { self, nixpkgs, flake-utils, srvc, ... }@inputs:
     flake-utils.lib.eachDefaultSystem (system:
+      with import nixpkgs { inherit system; };
       let
-        pkgs = import nixpkgs { inherit system; };
-        default = pkgs.callPackage ./default.nix { };
-      in with pkgs; {
-        packages = { inherit default; };
-        devShells.default = import ./shell.nix { inherit pkgs; };
+        srvc-server = stdenv.mkDerivation {
+          name = "srvc-server";
+          src = ./.;
+
+          installPhase = ''
+            mkdir -p $out
+          '';
+        };
+      in {
+        packages = {
+          inherit srvc-server;
+          default = srvc-server;
+        };
+        devShells.default = mkShell {
+          buildInputs = [
+            clojure
+            jdk
+            perl
+            rlwrap
+            srvc.packages.${system}.default
+          ];
+        };
       });
 }
