@@ -8,7 +8,7 @@
             [reitit.core :as re]
             [reitit.ring.middleware.parameters :refer [parameters-middleware]]
             [rum.core :as rum :refer [defc]]
-            [srvc.server.review :as review]))
+            [srvc.server.flow :as flow]))
 
 (def re-project-name
   #"[A-Za-z](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}")
@@ -102,7 +102,7 @@
              [[:a {:href (project-url "")} "Overview"]
               [:a {:href (project-url "/activity")} "Activity"]
               [:a {:href (project-url "/documents")} "Documents"]
-              [:a {:href (project-url "/review")} "Review"]])
+              [:a {:href (project-url "/flow")} "Flows"]])
            (concat
             [(if email
                [:a {:href "/logout"} "Log Out (" email ")"]
@@ -369,14 +369,14 @@
         (deliver http-port-promise http-port))
       (project-POST request project-name "/upload" [event]))))
 
-(defn load-review-process
-  [{:keys [session] :as request} review-processes project-name project-config flow-name]
+(defn load-flow-process
+  [{:keys [session] :as request} flow-processes project-name project-config flow-name]
   (let [{:keys [email]} session
         k [project-name flow-name email]]
     (or
-     (get @review-processes k)
+     (get @flow-processes k)
      (let [http-port-promise (promise)
-           process (-> (review/review-process
+           process (-> (flow/flow-process
                         project-name
                         project-config
                         flow-name
@@ -384,10 +384,10 @@
                         prn
                         (str "mailto:" (:email session)))
                        (assoc :http-port-promise http-port-promise))]
-       (swap! review-processes assoc k process)
+       (swap! flow-processes assoc k process)
        process))))
 
-(defn review [request]
+(defn get-flows [request]
   (let [{:keys [project-name]} (-> request ::re/match :path-params)
         resp @(project-GET request project-name)]
     (case (:status resp)
@@ -400,15 +400,15 @@
              [:ul
               (map
                #(do [:li
-                     [:a {:href (str "/p/" project-name "/review/" %)}
+                     [:a {:href (str "/p/" project-name "/flow/" %)}
                       %]])
                (->> resp :body :config :flows keys
                     (map name)
                     (sort-by str/lower-case)))]]))
       (server-error request))))
 
-(defn review-flow [{:keys [::re/match scheme session] :as request}
-                   {:keys [proxy-config review-processes]}]
+(defn get-flow [{:keys [::re/match scheme session] :as request}
+                   {:keys [flow-processes proxy-config]}]
   (let [{:keys [flow-name project-name]} (:path-params match)
         {:keys [status] :as resp} @(project-GET request project-name)
         flow (-> resp :body :config :flows (get (keyword flow-name)))]
@@ -418,15 +418,15 @@
       (or (= 404 status) (not flow)) (not-found request)
       (not= 200 status) (server-error request)
       :else
-      (let [process (load-review-process
-                     request review-processes
+      (let [process (load-flow-process
+                     request flow-processes
                      project-name (-> resp :body :config)
                      flow-name)
             proxy-url (str "http://localhost:" @(:http-port-promise process))]
         {:status 302
          :headers {"Location" (str (name scheme) "://" (:host proxy-config)
                                    ":" (first (:listen-ports proxy-config)))}
-         :session (assoc session :review-proxy-url proxy-url)}
+         :session (assoc session :flow-proxy-url proxy-url)}
         #_(-> (response
              (body
               request
@@ -435,8 +435,8 @@
                    :href (str (name scheme) "://" (:host proxy-config)
                               ":" (first (:listen-ports proxy-config)))
                    :target "_blank"}
-               "Open review in new tab"]))
-            (assoc :session (assoc session :review-proxy-url proxy-url)))))))
+               "Open flow in new tab"]))
+            (assoc :session (assoc session :flow-proxy-url proxy-url)))))))
 
 (defn login [{:keys [params]} & [error]]
   ;; https://tailwindcomponents.com/component/login-showhide-password
@@ -543,8 +543,8 @@
        ["" {:get (h #'get-project)}]
        ["/activity" {:get (h #'activity)}]
        ["/documents" {:get (h #'documents)}]
-       ["/review" {:get (h #'review)}]
-       ["/review/:flow-name" {:get #(review-flow % config)}]]
+       ["/flow" {:get (h #'get-flows)}]
+       ["/flow/:flow-name" {:get #(get-flow % config)}]]
       ["hx"
        ["/validate/:form-id/:field-id"
         {:post (h #'hx-validate-form-field)}]

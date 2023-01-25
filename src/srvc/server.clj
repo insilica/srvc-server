@@ -12,7 +12,7 @@
             [srvc.server.api :as api]
             [srvc.server.html :as html]
             [srvc.server.nrepl :as nrepl]
-            [srvc.server.review :as review]
+            [srvc.server.flow :as flow]
             [srvc.server.saml :as saml])
   (:import [java.util Base64]))
 
@@ -114,21 +114,21 @@
     {:env {::ds/start (constantly env)}
      :config (config-component)
      :http-server (http-server-component
-                   {:host (ds/local-ref [:config :host])
+                   {:flow-processes (ds/local-ref [:flow-processes])
+                    :host (ds/local-ref [:config :host])
                     :local-auth (ds/local-ref [:config :local-auth])
                     :port (ds/local-ref [:config :port])
                     :projects (ds/local-ref [:projects])
                     :proxy-config (ds/local-ref [:config :proxy])
-                    :review-processes (ds/local-ref [:review-processes])
                     :saml (ds/local-ref [:config :saml])
                     :session-opts (ds/local-ref [:session-opts])})
      :nrepl-server (nrepl/nrepl-server-component
                     (ds/local-ref [:config :nrepl]))
      :projects (projects-component)
-     :proxy-server (review/proxy-server-component
+     :proxy-server (flow/proxy-server-component
                     {:listen-ports (ds/local-ref [:config :proxy :listen-ports])
                      :session-opts (ds/local-ref [:session-opts])})
-     :review-processes (review/review-processes-component)
+     :flow-processes (flow/flow-processes-component)
      :session-opts (session-opts-component
                     (ds/local-ref [:config :session]))}}})
 

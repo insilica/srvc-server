@@ -1,4 +1,4 @@
-(ns srvc.server.review
+(ns srvc.server.flow
   (:require [aleph.http :as ahttp]
             [babashka.fs :as fs]
             [babashka.process :as p]
@@ -30,7 +30,7 @@
     (.setDaemon true)
     .start))
 
-(defn review-process [project-name config flow-name add-events! tail-exception! reviewer]
+(defn flow-process [project-name config flow-name add-events! tail-exception! reviewer]
   (let [dir (fs/path project-name)
         db (some->> config :db (fs/path dir))
         temp-dir (fs/create-temp-dir)
@@ -46,12 +46,12 @@
       (fs/copy db sink))
     {:process (process/process
                {:dir (str dir)}
-               "sr" "--config" (str config-file) "review" flow-name)
+               "sr" "--config" (str config-file) "flow" flow-name)
      :sink-path sink
      :sink-thread (-> (tailer add-events! tail-exception! sink) start-daemon)
      :temp-dir temp-dir}))
 
-(defn review-processes-component []
+(defn flow-processes-component []
   #:donut.system
    {:start (fn [_]
              (atom {:processes {}}))
@@ -81,7 +81,7 @@
    {:port listen-port}))
 
 (defn session-url [{:keys [session]}]
-  (:review-proxy-url session))
+  (:flow-proxy-url session))
 
 (defn proxy-server-component [config]
   #:donut.system
