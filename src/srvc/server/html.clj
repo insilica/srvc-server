@@ -41,7 +41,7 @@
 (defn get-projects [request]
   (:projects (json-get request "/project")))
 
-(defn project-GET [request project-name path]
+(defn project-GET [request project-name & [path]]
   (client/get
    (api-url request (str "/project/" project-name path))
    {:as :stream
@@ -99,7 +99,8 @@
      [:div {:class "flex h-screen"}
       [:div {:class "h-screen w-64 pl-4 pt-4 text-lg text-slate-100 bg-slate-900"}
        (-> (when project-name
-             [[:a {:href (project-url "/activity")} "Activity"]
+             [[:a {:href (project-url "")} "Overview"]
+              [:a {:href (project-url "/activity")} "Activity"]
               [:a {:href (project-url "/documents")} "Documents"]
               [:a {:href (project-url "/review")} "Review"]])
            (concat
@@ -115,7 +116,7 @@
             [:a {:href "/"} "Projects: " [:span {:class "font-bold"} "+"]]
             [:div
              (->> projects
-                  (mapv #(do [:li [:a {:href (str "/p/" % "/documents")} %]]))
+                  (mapv #(do [:li [:a {:href (str "/p/" %)} %]]))
                   (into [:ul]))]]))]
       [:div {:class "flex-1 flex flex-col overflow-hidden pt-4 ml-4"}
        content]]]))
@@ -244,7 +245,7 @@
           [:h2.text-lg.font-bold "Projects"]
           [:div
            (->> projects
-                (mapv #(do [:li [:a {:href (str "/p/" % "/documents")} %]]))
+                (mapv #(do [:li [:a {:href (str "/p/" %)} %]]))
                 (into [:ul]))]])]))))
 
 (defn POST-home [request]
@@ -312,6 +313,37 @@
              :hx-trigger "every 1s"}
        (activity-table request)]))))
 
+(defn git-remote-link
+  "Turns a URL like git@github.com:insilica/sfac.git into a URL
+   viewable in the browser, like https://github.com/insilica/sfac
+   Returns non-'git@' URLs as-is.
+
+   Relies on convention. Won't be accurate for all git remotes."
+  [git-remote]
+  (if (str/starts-with? git-remote "git@")
+    (-> git-remote
+        (subs 4)
+        (str/replace-first ":" "/")
+        (->> (str "https://")))
+    git-remote))
+
+(defn get-project [request]
+  (let [{:keys [project-name]} (-> request ::re/match :path-params)
+        {:keys [status]
+         {:keys [git]} :body}
+        #__ @(project-GET request project-name)
+        git-origin (-> git :remotes :origin)]
+    (case status
+      200 (response
+           (body
+            request
+            [:div
+             (when git-origin
+               [:a {:href (git-remote-link git-origin)}
+                "Git repository: " git-origin])]))
+      404 (not-found request)
+      (server-error request))))
+
 (defn hx-response [hiccup]
   {:status 200
    :body (rum/render-static-markup hiccup)})
@@ -357,7 +389,7 @@
 
 (defn review [request]
   (let [{:keys [project-name]} (-> request ::re/match :path-params)
-        resp @(project-GET request project-name "/config")]
+        resp @(project-GET request project-name)]
     (case (:status resp)
       404 (not-found request)
       200 (response
@@ -370,7 +402,7 @@
                #(do [:li
                      [:a {:href (str "/p/" project-name "/review/" %)}
                       %]])
-               (->> resp :body :flows keys
+               (->> resp :body :config :flows keys
                     (map name)
                     (sort-by str/lower-case)))]]))
       (server-error request))))
@@ -378,8 +410,8 @@
 (defn review-flow [{:keys [::re/match scheme session] :as request}
                    {:keys [proxy-config review-processes]}]
   (let [{:keys [flow-name project-name]} (:path-params match)
-        {:keys [status] :as resp} @(project-GET request project-name "/config")
-        flow (-> resp :body :flows (get (keyword flow-name)))]
+        {:keys [status] :as resp} @(project-GET request project-name)
+        flow (-> resp :body :config :flows (get (keyword flow-name)))]
     (cond
       (not (:email session)) {:status 302
                               :headers {"Location" "/login"}}
@@ -388,7 +420,7 @@
       :else
       (let [process (load-review-process
                      request review-processes
-                     project-name (:body resp)
+                     project-name (-> resp :body :config)
                      flow-name)
             proxy-url (str "http://localhost:" @(:http-port-promise process))]
         {:status 302
@@ -478,7 +510,7 @@
     (cond
       (not (seq email))
       (login request)
-      
+
       (some->> local-auth :users
                (filter #(= email (str/lower-case (:email %))))
                first :password
@@ -487,7 +519,7 @@
       {:status 302
        :headers {"Location" "/"}
        :session (assoc session :email email)}
-      
+
       :else
       (login request "Wrong email or password"))))
 
@@ -508,6 +540,7 @@
                 :post #(POST-login % config)}]
       ["logout" {:get (h #'logout)}]
       ["p/:project-name"
+       ["" {:get (h #'get-project)}]
        ["/activity" {:get (h #'activity)}]
        ["/documents" {:get (h #'documents)}]
        ["/review" {:get (h #'review)}]

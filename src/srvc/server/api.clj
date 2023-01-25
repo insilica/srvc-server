@@ -7,7 +7,8 @@
             [clojure.string :as str]
             [muuntaja.middleware :as mw]
             [org.httpkit.server :as server]
-            [reitit.core :as re]))
+            [reitit.core :as re]
+            [srvc.server.process :as process]))
 
 (defonce write-lock (Object.))
 
@@ -43,15 +44,6 @@
            :dumper-options {:flow-style :block}))
         success))))
 
-(defn project-config [request]
-  (let [{:keys [project-name]} (-> request ::re/match :path-params)
-        path (some-> project-name (fs/path "sr.yaml"))]
-    (if-not (fs/exists? path)
-      not-found
-      (let [config (-> path fs/file io/reader yaml/parse-stream
-                       json/write-str (json/read-str :key-fn keyword))]
-        {:body config}))))
-
 (defn add-data [{:keys [by-hash raw] :as data} {:keys [hash type] :as item}]
   (if (get by-hash hash)
     data
@@ -70,19 +62,40 @@
       (reduce add-data {} items))
     (catch java.io.FileNotFoundException _)))
 
+(defn git-origin [project-name]
+  (let [{:keys [exit out]} (try
+                             @(process/process
+                               {:dir project-name
+                                :err :string
+                                :out :string}
+                               "git" "remote" "get-url" "origin")
+                             (catch java.io.IOException _))]
+    (when (some-> exit zero?)
+      (str/trim out))))
+
 (defn load-project [projects name]
   (or
    (get @projects name)
    (let [config-file (fs/path name "sr.yaml")
          config (-> config-file fs/file slurp yaml/parse-string)
          db-file (->> config :db (fs/path name))
-         events (load-data db-file)
          project {:config config
                   :config-file config-file
                   :db-file db-file
-                  :events events}]
+                  :events (load-data db-file)
+                  :git
+                  {:remotes
+                   {:origin (git-origin name)}}}]
      (swap! projects assoc name project)
      project)))
+
+(defn get-project [request projects]
+  (let [{:keys [project-name]} (-> request ::re/match :path-params)
+        project (load-project projects project-name)]
+    (if-not project
+      not-found
+      {:status 200
+       :body (select-keys project [:config :git])})))
 
 (defn add-events! [projects name events]
   (let [{:keys [db-file] :as project} (load-project projects name)]
@@ -145,7 +158,7 @@
      ["/project" {:get (h #'get-projects)
                   :post (h #'POST-project)}]
      ["/project/:project-name"
-      ["/config" {:get (h #'project-config)}]
+      ["" {:get #(get-project % projects)}]
       ["/document" {:get #(get-documents % projects)}]
       ["/document/:id/label-answers" {:get #(doc-answers % projects)}]
       ["/hash/:id" {:get #(hash % projects)}]

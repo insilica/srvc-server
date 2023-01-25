@@ -30,6 +30,7 @@
         devShells.default = mkShell {
           buildInputs = [
             clojure
+            git
             jdk
             perl
             rlwrap
