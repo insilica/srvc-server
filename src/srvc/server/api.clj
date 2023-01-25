@@ -44,22 +44,33 @@
            :dumper-options {:flow-style :block}))
         success))))
 
-(defn add-data [{:keys [by-hash raw] :as data} {:keys [hash type] :as item}]
-  (if (get by-hash hash)
-    data
-    (cond-> (assoc data
-                   :by-hash (assoc (or by-hash {}) hash item)
-                   :raw (conj (or raw []) item))
+(defn realized-delay
+  "Creates an already realized delay. Used when a value may be either a future
+   or a delay. Allows `realized?` to return true when the reference is immediately
+   available."
+  [x]
+  (let [id (delay x)]
+    (force id)
+    id))
 
-      (= "label-answer" type)
-      (update-in [:doc-to-answers (-> item :data :document)]
-                 (fnil conj []) item))))
+(defn add-data [events {:keys [hash type] :as item}]
+  (let [{:keys [by-hash raw] :as data} @events]
+    (realized-delay
+     (if (get by-hash hash)
+       data
+       (cond-> (assoc data
+                      :by-hash (assoc (or by-hash {}) hash item)
+                      :raw (conj (or raw []) item))
+
+         (= "label-answer" type)
+         (update-in [:doc-to-answers (-> item :data :document)]
+                    (fnil conj []) item))))))
 
 (defn load-data [file]
   (try
     (let [items (->> file fs/file io/reader line-seq distinct
                      (map #(json/read-str % :key-fn keyword)))]
-      (reduce add-data {} items))
+      (reduce add-data (delay {}) items))
     (catch java.io.FileNotFoundException _)))
 
 (defn git-origin [project-name]
@@ -82,7 +93,7 @@
          project {:config config
                   :config-file config-file
                   :db-file db-file
-                  :events (load-data db-file)
+                  :events (future @(load-data db-file))
                   :git
                   {:remotes
                    {:origin (git-origin name)}}}]
@@ -110,20 +121,20 @@
   (let [{:keys [project-name]} (-> request ::re/match :path-params)
         {:keys [events]} (load-project projects project-name)]
     {:status 200
-     :body (->> events :raw
+     :body (->> @events :raw
                 (filter (comp #{"document"} :type)))}))
 
 (defn get-recent-events [request projects]
   (let [{:keys [project-name]} (-> request ::re/match :path-params)
         {:keys [events]} (load-project projects project-name)
-        recent-events (some->> events :raw rseq (take 100))]
+        recent-events (some->> @events :raw rseq (take 100))]
     {:status 200
      :body (vec recent-events)}))
 
 (defn hash [request projects]
   (let [{:keys [id project-name]} (-> request ::re/match :path-params)
         {:keys [events]} (load-project projects project-name)
-        event (get (:by-hash events) id)]
+        event (get (:by-hash @events) id)]
     (if event
       {:body event}
       not-found)))
@@ -140,9 +151,9 @@
 (defn doc-answers [request projects]
   (let [{:keys [id project-name]} (-> request ::re/match :path-params)
         {:keys [events]} (load-project projects project-name)
-        event (get (:by-hash events) id)]
+        event (get (:by-hash @events) id)]
     (when event
-      {:body (-> events :doc-to-answers (get id))})))
+      {:body (-> @events :doc-to-answers (get id))})))
 
 (defn upload [request projects]
   (let [{:keys [project-name]} (-> request ::re/match :path-params)]
