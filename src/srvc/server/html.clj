@@ -132,7 +132,7 @@
                          "404 Not Found"]]))))})
 
 (defn server-error [request]
-  {:status 404
+  {:status 500
    :headers {"Content-Type" "text/html"}
    :body (list "<!doctype html>"
                (rum/render-static-markup
