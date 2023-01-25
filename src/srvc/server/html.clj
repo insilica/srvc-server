@@ -262,14 +262,17 @@
 
 (defn documents [request]
   (let [{:keys [project-name]} (-> request ::re/match :path-params)
-        documents (json-get request (str "/project/" project-name "/document"))]
-    (response
-     (body
-      request
-      (table ["Document" "Inclusion"]
-             (map (fn [doc]
-                    [(doc-title doc) "Yes"])
-                  documents))))))
+        {:keys [status] documents :body} @(project-GET request project-name "/document")]
+    (case status
+      200 (response
+           (body
+            request
+            (table ["Document" "Inclusion"]
+                   (map (fn [doc]
+                          [(doc-title doc) "Yes"])
+                        documents))))
+      404 (not-found request)
+      (server-error request))))
 
 (defc answer-table [request project-name doc-hash reviewer]
   (let [answers (->> (json-get request (str "/project/" project-name "/document/" doc-hash "/label-answers"))
@@ -305,13 +308,17 @@
           (take 10 (recent-event-seq request)))])
 
 (defn activity [request]
-  (let [{:keys [project-name]} (-> request ::re/match :path-params)]
-    (response
-     (body
-      request
-      [:div {:hx-get (str "/hx/" project-name "/activity")
-             :hx-trigger "every 1s"}
-       (activity-table request)]))))
+  (let [{:keys [project-name]} (-> request ::re/match :path-params)
+        {:keys [status]} @(project-GET request project-name "/recent-events")]
+    (case status
+      200 (response
+           (body
+            request
+            [:div {:hx-get (str "/hx/" project-name "/activity")
+                   :hx-trigger "every 1s"}
+             (activity-table request)]))
+      404 (not-found request)
+      (server-error request))))
 
 (defn git-remote-link
   "Turns a URL like git@github.com:insilica/sfac.git into a URL
@@ -408,7 +415,7 @@
       (server-error request))))
 
 (defn get-flow [{:keys [::re/match scheme session] :as request}
-                   {:keys [flow-processes proxy-config]}]
+                {:keys [flow-processes proxy-config]}]
   (let [{:keys [flow-name project-name]} (:path-params match)
         {:keys [status] :as resp} @(project-GET request project-name)
         flow (-> resp :body :config :flows (get (keyword flow-name)))]
@@ -428,15 +435,15 @@
                                    ":" (first (:listen-ports proxy-config)))}
          :session (assoc session :flow-proxy-url proxy-url)}
         #_(-> (response
-             (body
-              request
-              [:a {;:class ["w-full" "bg-white"]
+               (body
+                request
+                [:a {;:class ["w-full" "bg-white"]
                         ;:style {:height "100vh"}
-                   :href (str (name scheme) "://" (:host proxy-config)
-                              ":" (first (:listen-ports proxy-config)))
-                   :target "_blank"}
-               "Open flow in new tab"]))
-            (assoc :session (assoc session :flow-proxy-url proxy-url)))))))
+                     :href (str (name scheme) "://" (:host proxy-config)
+                                ":" (first (:listen-ports proxy-config)))
+                     :target "_blank"}
+                 "Open flow in new tab"]))
+              (assoc :session (assoc session :flow-proxy-url proxy-url)))))))
 
 (defn login [{:keys [params]} & [error]]
   ;; https://tailwindcomponents.com/component/login-showhide-password

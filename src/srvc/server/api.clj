@@ -87,18 +87,19 @@
 (defn load-project [projects name]
   (or
    (get @projects name)
-   (let [config-file (fs/path name "sr.yaml")
-         config (-> config-file fs/file slurp yaml/parse-string)
-         db-file (->> config :db (fs/path name))
-         project {:config config
-                  :config-file config-file
-                  :db-file db-file
-                  :events (future @(load-data db-file))
-                  :git
-                  {:remotes
-                   {:origin (git-origin name)}}}]
-     (swap! projects assoc name project)
-     project)))
+   (let [config-file (fs/path name "sr.yaml")]
+     (when (fs/exists? config-file)
+       (let [config (-> config-file fs/file slurp yaml/parse-string)
+             db-file (->> config :db (fs/path name))
+             project {:config config
+                      :config-file config-file
+                      :db-file db-file
+                      :events (future @(load-data db-file))
+                      :git
+                      {:remotes
+                       {:origin (git-origin name)}}}]
+         (swap! projects assoc name project)
+         project)))))
 
 (defn get-project [request projects]
   (let [{:keys [project-name]} (-> request ::re/match :path-params)
@@ -119,17 +120,21 @@
 
 (defn get-documents [request projects]
   (let [{:keys [project-name]} (-> request ::re/match :path-params)
-        {:keys [events]} (load-project projects project-name)]
-    {:status 200
-     :body (->> @events :raw
-                (filter (comp #{"document"} :type)))}))
+        {:keys [events] :as project} (load-project projects project-name)]
+    (if-not project
+      not-found
+      {:status 200
+       :body (->> @events :raw
+                  (filter (comp #{"document"} :type)))})))
 
 (defn get-recent-events [request projects]
   (let [{:keys [project-name]} (-> request ::re/match :path-params)
-        {:keys [events]} (load-project projects project-name)
-        recent-events (some->> @events :raw rseq (take 100))]
-    {:status 200
-     :body (vec recent-events)}))
+        {:keys [events] :as project} (load-project projects project-name)
+        recent-events (some->> events deref :raw rseq (take 100))]
+    (if-not project
+      not-found
+      {:status 200
+       :body (vec recent-events)})))
 
 (defn hash [request projects]
   (let [{:keys [id project-name]} (-> request ::re/match :path-params)
