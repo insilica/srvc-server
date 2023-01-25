@@ -5,20 +5,9 @@
             [clj-yaml.core :as yaml]
             [clojure.java.io :as io]
             [hyperlight.http-proxy :as http-proxy]
-            [ring.middleware.session :as session])
+            [ring.middleware.session :as session]
+            [srvc.server.process :as process])
   (:import [org.apache.commons.io.input Tailer TailerListener]))
-
-(def default-opts
-  {:in nil
-   :err :inherit
-   :out :inherit
-   :shutdown p/destroy-tree})
-
-(defn process [& args]
-  (let [[maybe-opts & more] args]
-    (if (map? maybe-opts)
-      (apply p/process (merge default-opts maybe-opts) more)
-      (apply p/process args))))
 
 (defrecord TailListener [f g]
   TailerListener
@@ -55,7 +44,7 @@
       (yaml/generate-stream writer config))
     (when (fs/exists? db)
       (fs/copy db sink))
-    {:process (process
+    {:process (process/process
                {:dir (str dir)}
                "sr" "--config" (str config-file) "review" flow-name)
      :sink-path sink
