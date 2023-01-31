@@ -71,7 +71,8 @@
     (let [items (->> file fs/file io/reader line-seq distinct
                      (map #(json/read-str % :key-fn keyword)))]
       (reduce add-data (delay {}) items))
-    (catch java.io.FileNotFoundException _)))
+    (catch java.io.FileNotFoundException _
+      (delay nil))))
 
 (defn git-origin [project-name]
   (let [{:keys [exit out]} (try
