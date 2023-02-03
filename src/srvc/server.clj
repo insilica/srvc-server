@@ -1,6 +1,7 @@
 (require 'hashp.core)
 
 (ns srvc.server
+  (:gen-class)
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]

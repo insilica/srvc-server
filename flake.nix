@@ -8,31 +8,38 @@
       url = "github:edolstra/flake-compat";
       flake = false;
     };
+    clj-nix = {
+      url = "github:jlesquembre/clj-nix";
+      inputs.flake-utils.follows = "flake-utils";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     srvc = {
       url = "github:insilica/rs-srvc";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.flake-utils.follows = "flake-utils";
     };
   };
-  outputs = { self, nixpkgs, flake-utils, srvc, ... }@inputs:
+  outputs = { self, nixpkgs, flake-utils, clj-nix, srvc, ... }@inputs:
     flake-utils.lib.eachDefaultSystem (system:
       with import nixpkgs { inherit system; };
       let
-        srvc-server = stdenv.mkDerivation {
+        cljpkgs = clj-nix.packages."${system}";
+        srvc-server-bin = cljpkgs.mkCljBin {
+          projectSrc = ./.;
           name = "srvc-server";
-          src = ./.;
-
-          installPhase = ''
-            mkdir -p $out
-          '';
+          main-ns = "srvc.server";
+          jdkRunner = pkgs.jdk17_headless;
         };
+        # Strips out unused JDK code for a smaller binary
+        srvc-server = cljpkgs.customJdk { cljDrv = srvc-server-bin; };
       in {
         packages = {
-          inherit srvc-server;
+          inherit srvc-server srvc-server-bin;
           default = srvc-server;
         };
         devShells.default = mkShell {
           buildInputs = [
+            clj-nix.packages.${system}.deps-lock
             clojure
             git
             jdk
