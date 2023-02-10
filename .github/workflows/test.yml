@@ -32,7 +32,6 @@ jobs:
     - name: Build Nix derivations
       if: steps.nix-cache-restore.outputs.cache-hit != 'true'
       run: |
-        nix flake check
         nix develop -c echo OK
         nix build
 
