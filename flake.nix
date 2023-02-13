@@ -14,7 +14,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     srvc = {
-      url = "github:insilica/rs-srvc";
+      url = "github:insilica/rs-srvc/v0.14.0";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.flake-utils.follows = "flake-utils";
     };
