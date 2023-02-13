@@ -6,6 +6,7 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [donut.system :as ds]
+            [hato.client :as hc]
             [org.httpkit.server :as server]
             [reitit.ring :as rr]
             [ring.middleware.session :as session]
@@ -75,6 +76,21 @@
         :stop (constantly nil)
         :config {:filename (ds/local-ref [:env :config-file])}})
 
+(def default-hato-config
+  {:connect-timeout 10000
+   :redirect-policy :always})
+
+(defn hato-component [config]
+  #::ds{:config (merge default-hato-config config)
+        :start (fn [{::ds/keys [config instance]}]
+                 (if (:client instance)
+                   instance
+                   {:client (hc/build-http-client config)}))
+        :stop (fn [{::ds/keys [instance]}]
+                (if (:client instance)
+                  (dissoc instance :client)
+                  instance))})
+
 (defn http-server-component [config]
   #::ds{:config config
         :start (fn [{:keys [::ds/config]}]
@@ -114,8 +130,10 @@
    {:srvc-server
     {:env {::ds/start (constantly env)}
      :config (config-component)
+     :hato (hato-component (ds/local-ref [:config :hato]))
      :http-server (http-server-component
                    {:flow-processes (ds/local-ref [:flow-processes])
+                    :hato (ds/local-ref [:hato])
                     :host (ds/local-ref [:config :host])
                     :local-auth (ds/local-ref [:config :local-auth])
                     :port (ds/local-ref [:config :port])

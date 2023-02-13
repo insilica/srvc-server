@@ -3,8 +3,8 @@
             [clojure.data.json :as json]
             [clojure.java.io :as io]
             [clojure.string :as str]
+            [hato.client :as hc]
             [lambdaisland.uri :as uri]
-            [org.httpkit.client :as client]
             [reitit.core :as re]
             [reitit.ring.middleware.parameters :refer [parameters-middleware]]
             [rum.core :as rum :refer [defc]]
@@ -26,11 +26,11 @@
 
 (defn json-get [request path]
   (let [{:keys [body status] :as response}
-        @(client/get
-          (api-url request path)
-          {:as :stream
-           :timeout 5000}
-          parse-json-body)]
+        (-> (hc/get
+             (api-url request path)
+             {:as :stream
+              :http-client (-> request :config :hato :client)})
+            parse-json-body)]
     (if (= 200 status)
       body
       (throw (ex-info "Unexpected response" {:response response})))))
@@ -42,35 +42,33 @@
   (:projects (json-get request "/project")))
 
 (defn project-GET [request project-name & [path]]
-  (client/get
-   (api-url request (str "/project/" project-name path))
-   {:as :stream
-    :timeout 5000}
-   parse-json-body))
+  (-> (hc/get
+       (api-url request (str "/project/" project-name path))
+       {:as :stream
+        :http-client (-> request :config :hato :client)})
+      parse-json-body))
 
 (defn create-project [request name]
   (let [{:keys [status] :as response}
-        @(client/post
-          (api-url request "/project")
-          {:as :stream
-           :body (json/write-str {:name name})
-           :headers {"Accept" "application/json"
-                     "Content-Type" "application/json"}
-           :timeout 5000}
-          parse-json-body)]
+        (hc/post
+         (api-url request "/project")
+         {:as :stream
+          :body (json/write-str {:name name})
+          :headers {"Accept" "application/json"
+                    "Content-Type" "application/json"}
+          :http-client (-> request :config :hato :client)})]
     (when-not (and status (<= 200 status 299))
       (throw (ex-info "Unexpected response" {:response response})))))
 
 (defn project-POST [request project-name path body]
   (let [{:keys [status] :as response}
-        @(client/post
-          (api-url request (str "/project/" project-name path))
-          {:as :stream
-           :body (json/write-str body)
-           :headers {"Accept" "application/json"
-                     "Content-Type" "application/json"}
-           :timeout 5000}
-          parse-json-body)]
+        (hc/post
+         (api-url request (str "/project/" project-name path))
+         {:as :stream
+          :body (json/write-str body)
+          :headers {"Accept" "application/json"
+                    "Content-Type" "application/json"}
+          :http-client (-> request :config :hato :client)})]
     (when-not (and status (<= 200 status 299))
       (throw (ex-info "Unexpected response" {:response response})))))
 
@@ -262,7 +260,7 @@
 
 (defn documents [request]
   (let [{:keys [project-name]} (-> request ::re/match :path-params)
-        {:keys [status] documents :body} @(project-GET request project-name "/document")]
+        {:keys [status] documents :body} (project-GET request project-name "/document")]
     (case status
       200 (response
            (body
@@ -309,7 +307,7 @@
 
 (defn activity [request]
   (let [{:keys [project-name]} (-> request ::re/match :path-params)
-        {:keys [status]} @(project-GET request project-name "/recent-events")]
+        {:keys [status]} (project-GET request project-name "/recent-events")]
     (case status
       200 (response
            (body
@@ -338,7 +336,7 @@
   (let [{:keys [project-name]} (-> request ::re/match :path-params)
         {:keys [status]
          {:keys [git]} :body}
-        #__ @(project-GET request project-name)
+        #__ (project-GET request project-name)
         git-origin (-> git :remotes :origin)]
     (case status
       200 (response
@@ -396,7 +394,7 @@
 
 (defn get-flows [request]
   (let [{:keys [project-name]} (-> request ::re/match :path-params)
-        resp @(project-GET request project-name)]
+        resp (project-GET request project-name)]
     (case (:status resp)
       404 (not-found request)
       200 (response
@@ -414,10 +412,10 @@
                     (sort-by str/lower-case)))]]))
       (server-error request))))
 
-(defn get-flow [{:keys [::re/match scheme session] :as request}
-                {:keys [flow-processes proxy-config]}]
-  (let [{:keys [flow-name project-name]} (:path-params match)
-        {:keys [status] :as resp} @(project-GET request project-name)
+(defn get-flow [{:keys [config ::re/match scheme session] :as request}]
+  (let [{:keys [flow-processes proxy-config]} config
+        {:keys [flow-name project-name]} (:path-params match)
+        {:keys [status] :as resp} (project-GET request project-name)
         flow (-> resp :body :config :flows (get (keyword flow-name)))]
     (cond
       (not (:email session)) {:status 302
@@ -511,8 +509,9 @@
             [:button {:class "mt-3 text-lg font-semibold  bg-gray-800 w-full text-white rounded-lg px-6 py-3 block shadow-xl hover:text-white hover:bg-black"}
              "Log in"]]]]]]]]])))
 
-(defn POST-login [{:keys [params session] :as request} {:keys [local-auth]}]
-  (let [{:strs [email password rememberme]} params
+(defn POST-login [{:keys [config params session] :as request}]
+  (let [{:keys [local-auth]} config
+        {:strs [email password rememberme]} params
         email (some-> email str/trim str/lower-case)]
     (cond
       (not (seq email))
@@ -538,20 +537,24 @@
 (defn routes [config]
   (let [;; Allow hot-reloading in dev when handler is a var.
         ;; reitit does not natively understand vars.
-        h (fn [handler] (fn [request] (handler request)))]
+        h (fn [handler]
+            (fn [request]
+              (-> request
+                  (assoc :config config)
+                  handler)))]
     [["/" {:get (h #'home)
            :middleware [parameters-middleware]
            :post (h #'POST-home)}]
      ["/" {:middleware [parameters-middleware]}
       ["login" {:get (h #'login)
-                :post #(POST-login % config)}]
+                :post (h #'POST-login)}]
       ["logout" {:get (h #'logout)}]
       ["p/:project-name"
        ["" {:get (h #'get-project)}]
        ["/activity" {:get (h #'activity)}]
        ["/documents" {:get (h #'documents)}]
        ["/flow" {:get (h #'get-flows)}]
-       ["/flow/:flow-name" {:get #(get-flow % config)}]]
+       ["/flow/:flow-name" {:get (h #'get-flow)}]]
       ["hx"
        ["/validate/:form-id/:field-id"
         {:post (h #'hx-validate-form-field)}]

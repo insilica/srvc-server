@@ -10,6 +10,7 @@
         commons-io/commons-io {:mvn/version "2.11.0"}
         hashp/hashp {:mvn/version "0.2.2"
                      :exclusions [rewrite-cljs/rewrite-cljs]}
+        hato/hato {:mvn/version "0.9.0"}
         http-kit/http-kit {:mvn/version "2.6.0"}
         lambdaisland/uri {:mvn/version "1.13.95"}
         metosin/muuntaja {:mvn/version "0.6.8"}

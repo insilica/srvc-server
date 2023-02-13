@@ -948,6 +948,16 @@
       "hash": "sha256-eTOa8c2trzRvLP3Yll/f41YNXc8eCS6UHCnY6cpwcrw="
     },
     {
+      "mvn-path": "hato/hato/0.9.0/hato-0.9.0.jar",
+      "mvn-repo": "https://repo.clojars.org/",
+      "hash": "sha256-XnmMiKvBSq8/ZmTf3CZ3stWtNm0ADfhxStu6DfzQDJs="
+    },
+    {
+      "mvn-path": "hato/hato/0.9.0/hato-0.9.0.pom",
+      "mvn-repo": "https://repo.clojars.org/",
+      "hash": "sha256-MV7MrPur6lzFaUdkykd4p53Wx4WzbwOrP21uGOV4Mkw="
+    },
+    {
       "mvn-path": "hiccup/hiccup/1.0.5/hiccup-1.0.5.jar",
       "mvn-repo": "https://repo.clojars.org/",
       "hash": "sha256-D9Sn5HRh29rnILaEsZcWTrtpO7Y1jI4UZ/+nhwdsB/w="
