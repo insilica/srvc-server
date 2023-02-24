@@ -11,11 +11,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1674900782,
-        "narHash": "sha256-rXNLt1X6K2M2JvDuRdpyaJUGtIU+ISiCYK4kx2FycfI=",
+        "lastModified": 1677177634,
+        "narHash": "sha256-wwgzyu6hQVslhDxtA6VrFuJkcNDncQ4lcE9v8P4iWMI=",
         "owner": "jlesquembre",
         "repo": "clj-nix",
-        "rev": "fb4d61aae67ae62d0c2c9cdfbfc311c6f7dc4c12",
+        "rev": "38cbd2f6dd3a9bdc7c06b6f065da4e93cfa99e44",
         "type": "github"
       },
       "original": {
@@ -98,11 +98,11 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1676150441,
-        "narHash": "sha256-Nfeua9Ua/dGHOQpzOjLtkyMyW/ysQCvZJ9Dd74QQSNk=",
+        "lastModified": 1677142198,
+        "narHash": "sha256-Y/uC2ZmkQkyrdRZ5szZilhZ/46786Wio5CGTgL+Vb/c=",
         "owner": "nixos",
         "repo": "nixpkgs",
-        "rev": "6d87734c880d704f6ee13e5c0fe835b98918c34e",
+        "rev": "03fb72201639e5274fee6d77b0d9c66e98329aba",
         "type": "github"
       },
       "original": {
@@ -132,16 +132,15 @@
         ]
       },
       "locked": {
-        "lastModified": 1676070178,
-        "narHash": "sha256-gid3zPN9fdUqqNnRKvhEfzO4rJqZ3lWwmlP6SWEUyAY=",
+        "lastModified": 1677264550,
+        "narHash": "sha256-dG+mQWrxx35B/cmyjaz+x4k/+zoJMcs8mLDhkHP9HtQ=",
         "owner": "insilica",
         "repo": "rs-srvc",
-        "rev": "a13e6ce3aa6a7959649bb8db89c35c0e99caf322",
+        "rev": "9e577d50a422cb6202a799d38dd5dd7c731270de",
         "type": "github"
       },
       "original": {
         "owner": "insilica",
-        "ref": "v0.14.0",
         "repo": "rs-srvc",
         "type": "github"
       }
