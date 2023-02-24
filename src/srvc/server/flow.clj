@@ -43,7 +43,9 @@
     (with-open [writer (io/writer (fs/file config-file))]
       (yaml/generate-stream writer config))
     (when (fs/exists? db)
-      (fs/copy db sink))
+      @(process/process
+           {:dir (str dir)}
+          "sr" "--config" (str config-file) "pull" (str (fs/canonicalize db))))
     {:process (process/process
                {:dir (str dir)}
                "sr" "--config" (str config-file) "flow" flow-name)

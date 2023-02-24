@@ -66,13 +66,20 @@
          (update-in [:doc-to-answers (-> item :data :document)]
                     (fnil conj []) item))))))
 
+(defn sqlite-ext? [file]
+  (let [lc (str/lower-case file)]
+    (or (str/ends-with? lc ".db")
+        (str/ends-with? lc ".sqlite"))))
+
 (defn load-data [file]
-  (try
-    (let [items (->> file fs/file io/reader line-seq distinct
-                     (map #(json/read-str % :key-fn keyword)))]
-      (reduce add-data (delay {}) items))
-    (catch java.io.FileNotFoundException _
-      (delay nil))))
+  (if (sqlite-ext? file)
+    (delay nil)
+    (try
+      (let [items (->> file fs/file io/reader line-seq distinct
+                       (map #(json/read-str % :key-fn keyword)))]
+        (reduce add-data (delay {}) items))
+      (catch java.io.FileNotFoundException _
+        (delay nil)))))
 
 (defn git-origin [project-name]
   (let [{:keys [exit out]} (try
