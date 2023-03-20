@@ -13,13 +13,8 @@
       inputs.flake-utils.follows = "flake-utils";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    srvc = {
-      url = "github:insilica/rs-srvc";
-      inputs.nixpkgs.follows = "nixpkgs";
-      inputs.flake-utils.follows = "flake-utils";
-    };
   };
-  outputs = { self, nixpkgs, flake-utils, clj-nix, srvc, ... }@inputs:
+  outputs = { self, nixpkgs, flake-utils, clj-nix, ... }@inputs:
     flake-utils.lib.eachDefaultSystem (system:
       with import nixpkgs { inherit system; };
       let
@@ -45,7 +40,7 @@
             jdk
             perl
             rlwrap
-            srvc.packages.${system}.default
+            srvc
           ];
         };
       });
