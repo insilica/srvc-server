@@ -92,12 +92,25 @@
     (when (some-> exit zero?)
       (str/trim out))))
 
+(defn get-full-config [project-name]
+  (let [config-file (fs/path project-name "sr.yaml")]
+    (when (fs/exists? config-file)
+      (let [{:keys [exit out] :as p} @(process/process
+                                       {:dir project-name
+                                        :err :string
+                                        :out :string}
+                                       "sr" "print-config")]
+        (if (zero? exit)
+          (json/read-str out :key-fn keyword)
+          (throw (ex-info (str "sr exited with code " exit)
+                          {:process p})))))))
+
 (defn load-project [projects name]
   (or
    (get @projects name)
    (let [config-file (fs/path name "sr.yaml")]
      (when (fs/exists? config-file)
-       (let [config (-> config-file fs/file slurp yaml/parse-string)
+       (let [config (get-full-config name)
              db-file (->> config :db (fs/path name))
              project {:config config
                       :config-file config-file
