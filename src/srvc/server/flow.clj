@@ -39,7 +39,7 @@
         config (assoc config
                       :db (str sink)
                       :reviewer reviewer
-                      :sink-all-events gtrue)]
+                      :sink-all-events true)]
     (with-open [writer (io/writer (fs/file config-file))]
       (yaml/generate-stream writer config))
     (when (fs/exists? db)
