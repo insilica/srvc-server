@@ -6,6 +6,7 @@
 (defn get-version [opts]
   (str version (when (:snapshot opts) "-SNAPSHOT")))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn uberjar "Run the CI pipeline of tests (and build the JAR)." [opts]
   (let [{:keys [lib target version] :as opts}
         (assoc opts :lib lib :version (get-version opts))

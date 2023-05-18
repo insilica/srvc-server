@@ -168,4 +168,4 @@
   (do (stop!) (start!) nil)
 
   ;; Generate a new session secret-key
-  (String. (.encode (Base64/getEncoder) (crypto.random/bytes 16))))
+  (String. (.encode (Base64/getEncoder) ((requiring-resolve 'crypto.random/bytes) 16))))

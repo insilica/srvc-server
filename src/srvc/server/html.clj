@@ -511,7 +511,7 @@
 
 (defn POST-login [{:keys [config params session] :as request}]
   (let [{:keys [local-auth]} config
-        {:strs [email password rememberme]} params
+        {:strs [email password]} params
         email (some-> email str/trim str/lower-case)]
     (cond
       (not (seq email))
