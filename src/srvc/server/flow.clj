@@ -30,16 +30,29 @@
     (.setDaemon true)
     .start))
 
+(defn remove-sink-steps [{:keys [flows] :as config}]
+  (->>
+   (reduce
+    (fn [m [k {:keys [steps] :as v}]]
+      (assoc m k
+             (if (-> steps last :run-embedded (= "sink"))
+               (assoc v :steps (vec (butlast steps)))
+               v)))
+    {}
+    flows)
+   (assoc config :flows)))
+
 (defn flow-process [project-name config flow-name add-events! tail-exception! reviewer]
   (let [dir (fs/path project-name)
         db (some->> config :db (fs/path dir))
         temp-dir (fs/create-temp-dir)
         config-file (fs/path temp-dir (str "config-" (random-uuid) ".yaml"))
         sink (fs/path temp-dir (str "sink-" (random-uuid) ".jsonl"))
-        config (assoc config
-                      :db (str sink)
-                      :reviewer reviewer
-                      :sink-all-events true)]
+        config(-> (assoc config
+                            :db (str sink)
+                            :reviewer reviewer
+                            :sink-all-events true)
+                     remove-sink-steps)]
     (with-open [writer (io/writer (fs/file config-file))]
       (yaml/generate-stream writer config))
     (when (fs/exists? db)
