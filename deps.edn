@@ -1,20 +1,20 @@
 {:paths ["resources" "src"]
  :deps {org.clojure/clojure {:mvn/version "1.11.1"}
-        babashka/process {:mvn/version "0.4.15"}
-        buddy/buddy-hashers {:mvn/version "1.8.158"}
-        cider/cider-nrepl {:mvn/version "0.29.0"}
+        babashka/process {:mvn/version "0.5.21"}
+        buddy/buddy-hashers {:mvn/version "2.0.162"}
+        cider/cider-nrepl {:mvn/version "0.30.0"}
         clj-commons/clj-yaml {:mvn/version "1.0.26"}
         club.donutpower/system {:mvn/version "0.0.165"
                                 :exclusions [tailrecursion/cljs-priority-map]}
         co.insilica/hyperlight {:mvn/version "1.0.0"}
-        commons-io/commons-io {:mvn/version "2.11.0"}
+        commons-io/commons-io {:mvn/version "2.13.0"}
         hashp/hashp {:mvn/version "0.2.2"
                      :exclusions [rewrite-cljs/rewrite-cljs]}
         hato/hato {:mvn/version "0.9.0"}
         http-kit/http-kit {:mvn/version "2.6.0"}
-        lambdaisland/uri {:mvn/version "1.13.95"}
+        lambdaisland/uri {:mvn/version "1.15.125"}
         metosin/muuntaja {:mvn/version "0.6.8"}
-        metosin/reitit {:mvn/version "0.5.18"}
+        metosin/reitit {:mvn/version "0.6.0"}
         metabase/saml20-clj {:mvn/version "2.0.2"}
         nrepl/nrepl {:mvn/version "1.0.0"}
         org.clojure/data.json {:mvn/version "2.4.0"}
@@ -24,8 +24,8 @@
  :aliases
  {:antq
   {:deps
-   {com.github.liquidz/antq {:mvn/version "2.2.983"}
-    org.slf4j/slf4j-nop {:mvn/version "2.0.6"}}
+   {com.github.liquidz/antq {:mvn/version "2.4.1070"}
+    org.slf4j/slf4j-nop {:mvn/version "2.0.7"}}
    :main-opts ["-m" "antq.core"]}
   :build
   {:deps {io.github.seancorfield/build-clj

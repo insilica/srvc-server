@@ -13,8 +13,13 @@
       inputs.flake-utils.follows = "flake-utils";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    srvc = {
+      url = "github:insilica/rs-srvc";
+      inputs.flake-utils.follows = "flake-utils";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
-  outputs = { self, nixpkgs, flake-utils, clj-nix, ... }@inputs:
+  outputs = { self, nixpkgs, flake-utils, clj-nix, srvc, ... }@inputs:
     flake-utils.lib.eachDefaultSystem (system:
       with import nixpkgs { inherit system; };
       let
@@ -25,12 +30,10 @@
           main-ns = "srvc.server";
           jdkRunner = pkgs.jdk17_headless;
         };
-        # Strips out unused JDK code for a smaller binary
-        srvc-server = cljpkgs.customJdk { cljDrv = srvc-server-bin; };
       in {
         packages = {
-          inherit srvc-server srvc-server-bin;
-          default = srvc-server;
+          inherit srvc-server-bin;
+          default = srvc-server-bin;
         };
         devShells.default = mkShell {
           buildInputs = [
@@ -40,7 +43,7 @@
             jdk
             perl
             rlwrap
-            srvc
+            srvc.packages.${system}.default
           ];
         };
       });

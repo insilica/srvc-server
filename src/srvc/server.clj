@@ -1,5 +1,3 @@
-(require 'hashp.core)
-
 (ns srvc.server
   (:gen-class)
   (:require [clojure.edn :as edn]
