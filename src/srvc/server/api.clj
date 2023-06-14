@@ -83,9 +83,7 @@
           :err :inherit
           :in (PipedInputStream. out)
           :out :inherit}
-         "sr" "flow" "srvc-server-sink" "--def"
-         (json/write-str
-          {:steps [{:run-embedded "generator -"}]}))
+         "sr" "pull" "-")
         (assoc :writer (OutputStreamWriter. out)))))
 
 (defn git-origin [project-name]

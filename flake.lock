@@ -224,11 +224,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1686700750,
-        "narHash": "sha256-ISuvgRdRelPNLhfSepg9olUqnAJ9KDPhsKseij3MhMg=",
+        "lastModified": 1686757870,
+        "narHash": "sha256-IWLwsulLKjhZDrShwCQJteUZ63vJMuoEwZVrwFJG8xc=",
         "owner": "insilica",
         "repo": "rs-srvc",
-        "rev": "3469ca9a28a1b6a363fcf36f4250468627f5fb99",
+        "rev": "fc9d4ac07f67667614bce43e87bc5dd44ec23f27",
         "type": "github"
       },
       "original": {
