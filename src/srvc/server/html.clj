@@ -253,10 +253,10 @@
           (redirect-after-post "/"))
       (home request))))
 
-(defn doc-title [{:keys [data uri]}]
+(defn doc-title [{:keys [data hash type uri]}]
   (or (get-in data [:ProtocolSection :IdentificationModule :OfficialTitle])
       uri
-      (json/write-str data)))
+      (str type " " hash)))
 
 (defn documents [request]
   (let [{:keys [project-name]} (-> request ::re/match :path-params)
@@ -272,13 +272,15 @@
       404 (not-found request)
       (server-error request))))
 
-(defc answer-table [request project-name doc-hash reviewer]
-  (let [answers (->> (json-get request (str "/project/" project-name "/document/" doc-hash "/label-answers"))
+(defc answer-table [request project-name event-hash reviewer]
+  (let [answers (some->> (try (json-get request (str "/project/" project-name "/document/" event-hash "/label-answers"))
+                          (catch java.io.EOFException _))
                      (filter #(-> % :data :reviewer (= reviewer))))]
-    (table ["Label" "Answer"]
-           (for [{{:keys [answer label]} :data} answers]
-             [(-> (get-event request project-name label) :data :question)
-              (if (string? answer) answer (pr-str answer))]))))
+    (when (seq answers)
+      (table ["Label" "Answer"]
+             (for [{{:keys [answer label]} :data} answers]
+               [(-> (get-event request project-name label) :data :question)
+                (if (string? answer) answer (pr-str answer))])))))
 
 (defn user-display [user-uri]
   (some-> user-uri uri/uri (assoc :scheme nil) str))
@@ -291,13 +293,14 @@
        [(case type
           "document" (str "New document: " (doc-title event))
           "label" (str "New label: " (:question data))
-          "label-answer" (let [{:keys [document reviewer]} data]
+          "label-answer" (let [{:keys [reviewer]
+                                data-event :event} data]
                            [:div (str (user-display reviewer)
                                       " labeled "
-                                      (->> document
+                                      (->> data-event
                                            (get-event request project-name)
                                            doc-title))
-                            (answer-table request project-name document reviewer)])
+                            (answer-table request project-name data-event reviewer)])
           (pr-str event))]))))
 
 (defc activity-table [request]
