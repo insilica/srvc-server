@@ -8,9 +8,8 @@
             [muuntaja.middleware :as mw]
             [org.httpkit.server :as server]
             [reitit.core :as re]
-            [srvc.server.process :as process]))
-
-(defonce write-lock (Object.))
+            [srvc.server.process :as process])
+  (:import [java.io OutputStreamWriter PipedInputStream PipedOutputStream]))
 
 (defn err [message]
   {:body {:error message}})
@@ -66,20 +65,28 @@
          (update-in [:doc-to-answers (-> item :data :document)]
                     (fnil conj []) item))))))
 
-(defn sqlite-ext? [file]
-  (let [lc (str/lower-case file)]
-    (or (str/ends-with? lc ".db")
-        (str/ends-with? lc ".sqlite"))))
+(defn load-data [project-name source]
+  (let [items (->> (process/process
+                    {:dir project-name
+                     :err :inherit
+                     :out :stream}
+                    "sr" "pull" "--db" "-" source)
+                   :out io/reader line-seq
+                   (keep #(when-not (str/blank? %)
+                            (json/read-str % :key-fn keyword))))]
+    (reduce add-data (delay {}) items)))
 
-(defn load-data [file]
-  (if (sqlite-ext? file)
-    (delay nil)
-    (try
-      (let [items (->> file fs/file io/reader line-seq distinct
-                       (map #(json/read-str % :key-fn keyword)))]
-        (reduce add-data (delay {}) items))
-      (catch java.io.FileNotFoundException _
-        (delay nil)))))
+(defn sink-process [project-name]
+  (let [out (PipedOutputStream.)]
+    (-> (process/process
+         {:dir project-name
+          :err :inherit
+          :in (PipedInputStream. out)
+          :out :inherit}
+         "sr" "flow" "srvc-server-sink" "--def"
+         (json/write-str
+          {:steps [{:run-embedded "generator -"}]}))
+        (assoc :writer (OutputStreamWriter. out)))))
 
 (defn git-origin [project-name]
   (let [{:keys [exit out]} (try
@@ -110,15 +117,14 @@
    (get @projects name)
    (let [config-file (fs/path name "sr.yaml")]
      (when (fs/exists? config-file)
-       (let [config (get-full-config name)
-             db-file (->> config :db (fs/path name))
+       (let [{:keys [db] :as config} (get-full-config name)
              project {:config config
                       :config-file config-file
-                      :db-file db-file
-                      :events (future @(load-data db-file))
+                      :events (future @(load-data name db))
                       :git
                       {:remotes
-                       {:origin (git-origin name)}}}]
+                       {:origin (git-origin name)}}
+                      :sink-process (sink-process name)}]
          (swap! projects assoc name project)
          project)))))
 
@@ -131,13 +137,14 @@
        :body (select-keys project [:config :git])})))
 
 (defn add-events! [projects name events]
-  (let [{:keys [db-file] :as project} (load-project projects name)]
-    (with-open [writer (-> db-file fs/file (io/writer :append true))]
-      (doseq [{:keys [hash] :as item} events]
-        (when-not (get-in project [:events :by-hash hash])
-          (json/write item writer)
-          (.write writer "\n")
-          (swap! projects update-in [name :events] add-data item))))))
+  (let [{:keys [sink-process] :as project} (load-project projects name)
+        {:keys [writer]} sink-process]
+    (doseq [{:keys [hash] :as item} events]
+      (when-not (get-in project [:events :by-hash hash])
+        (json/write item writer)
+        (.write writer "\n")
+        (.flush writer)
+        (swap! projects update-in [name :events] add-data item)))))
 
 (defn get-documents [request projects]
   (let [{:keys [project-name]} (-> request ::re/match :path-params)
