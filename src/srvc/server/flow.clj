@@ -29,6 +29,15 @@
   (doto (Thread. runnable)
     (.setDaemon true)
     .start))
+(defn remove-ports [{:keys [flows] :as config}]
+  (->>
+   (reduce
+    (fn [m [k {:keys [steps] :as v}]]
+      (assoc m k
+             (assoc v :steps (map #(dissoc % :port) steps))))
+    {}
+    flows)
+   (assoc config :flows)))
 
 (defn remove-sink-steps [{:keys [flows] :as config}]
   (->>
@@ -49,10 +58,11 @@
         config-file (fs/path temp-dir (str "config-" (random-uuid) ".yaml"))
         sink (fs/path temp-dir (str "sink-" (random-uuid) ".jsonl"))
         config(-> (assoc config
-                            :db (str sink)
-                            :reviewer reviewer
-                            :sink-all-events true)
-                     remove-sink-steps)]
+                         :db (str sink)
+                         :reviewer reviewer
+                         :sink-all-events true)
+                  remove-sink-steps
+                  remove-ports)]
     (with-open [writer (io/writer (fs/file config-file))]
       (yaml/generate-stream writer config))
     (when (fs/exists? db)
