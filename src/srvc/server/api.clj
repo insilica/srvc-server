@@ -39,7 +39,7 @@
         (with-open [writer (io/writer (fs/file sr-yaml))]
           (yaml/generate-stream
            writer
-           {:db "sink.jsonl"}
+           {:db "sink.db"}
            :dumper-options {:flow-style :block}))
         success))))
 
