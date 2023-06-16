@@ -102,7 +102,6 @@
                                     (default-handler)
                                     {:middleware [wrap-session]}))
                                {:host host :join? false :port port})]
-                   (prn (-> server .getURI .getPort))
                    {:port (-> server .getURI .getPort)
                     :server server}))
         :stop (fn [{{:keys [server]} ::ds/instance}]
