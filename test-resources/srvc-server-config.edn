@@ -1,4 +1,4 @@
-{:host "http://localhost:8090"
+{:host "localhost"
  :local-auth
  {:users
   [{:email "user1@example.com"

@@ -5,8 +5,8 @@
             [clojure.string :as str]
             [donut.system :as ds]
             [hato.client :as hc]
-            [org.httpkit.server :as server]
             [reitit.ring :as rr]
+            [ring.adapter.jetty :as jetty]
             [ring.middleware.session :as session]
             [ring.middleware.session.cookie :as cookie]
             [srvc.server.api :as api]
@@ -92,20 +92,21 @@
 (defn http-server-component [config]
   #::ds{:config config
         :start (fn [{:keys [::ds/config]}]
-                 (let [{:keys [session-opts]} config
+                 (let [{:keys [host port session-opts]} config
                        wrap-session (fn [handler]
                                       (session/wrap-session handler session-opts))
-                       server (server/run-server
+                       server (jetty/run-jetty
                                (-> (routes config)
                                    rr/router
                                    (rr/ring-handler
                                     (default-handler)
                                     {:middleware [wrap-session]}))
-                               {:legacy-return-value? false})]
-                   {:port (server/server-port server)
+                               {:host host :join? false :port port})]
+                   (prn (-> server .getURI .getPort))
+                   {:port (-> server .getURI .getPort)
                     :server server}))
-        :stop (fn [{::ds/keys [instance]}]
-                @(server/server-stop! (:server instance))
+        :stop (fn [{{:keys [server]} ::ds/instance}]
+                (.stop server)
                 nil)})
 
 (defn projects-component []
