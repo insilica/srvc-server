@@ -2,8 +2,6 @@
   (:require [aleph.http :as ahttp]
             [babashka.fs :as fs]
             [babashka.process :as p]
-            [clj-yaml.core :as yaml]
-            [clojure.java.io :as io]
             [hyperlight.http-proxy :as http-proxy]
             [ring.middleware.session :as session]
             [srvc.server.process :as process])
@@ -29,49 +27,23 @@
   (doto (Thread. runnable)
     (.setDaemon true)
     .start))
-(defn remove-ports [{:keys [flows] :as config}]
-  (->>
-   (reduce
-    (fn [m [k {:keys [steps] :as v}]]
-      (assoc m k
-             (assoc v :steps (map #(dissoc % :port) steps))))
-    {}
-    flows)
-   (assoc config :flows)))
-
-(defn remove-sink-steps [{:keys [flows] :as config}]
-  (->>
-   (reduce
-    (fn [m [k {:keys [steps] :as v}]]
-      (assoc m k
-             (if (-> steps last :run-embedded (= "sink"))
-               (assoc v :steps (vec (butlast steps)))
-               v)))
-    {}
-    flows)
-   (assoc config :flows)))
 
 (defn flow-process [project-name config flow-name add-events! tail-exception! reviewer]
   (let [dir (fs/path project-name)
-        db (some->> config :db (fs/path dir))
+        db (:db config)
         temp-dir (fs/create-temp-dir)
-        config-file (fs/path temp-dir (str "config-" (random-uuid) ".yaml"))
-        sink (fs/path temp-dir (str "sink-" (random-uuid) ".jsonl"))
-        config(-> (assoc config
-                         :db (str sink)
-                         :reviewer reviewer
-                         :sink-all-events true)
-                  remove-sink-steps
-                  remove-ports)]
-    (with-open [writer (io/writer (fs/file config-file))]
-      (yaml/generate-stream writer config))
-    (when (fs/exists? db)
-      @(process/process
-           {:dir (str dir)}
-          "sr" "--config" (str config-file) "pull" (str (fs/canonicalize db))))
+        sink (fs/path temp-dir (str "sink-" (random-uuid) ".jsonl"))]
+    @(process/process
+      {:dir (str dir)}
+      "sr" "pull" "--db" (str sink) db)
     {:process (process/process
                {:dir (str dir)}
-               "sr" "--config" (str config-file) "flow" flow-name)
+               "sr" "flow"
+               "--sink-control-events"
+               "--use-free-ports"
+               "--db" (str sink)
+               "--reviewer" reviewer
+               flow-name)
      :sink-path sink
      :sink-thread (-> (tailer add-events! tail-exception! sink) start-daemon)
      :temp-dir temp-dir}))
