@@ -10,7 +10,6 @@
     };
     clj-nix = {
       url = "github:jlesquembre/clj-nix";
-      inputs.flake-utils.follows = "flake-utils";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     srvc = {
