@@ -6,7 +6,6 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [muuntaja.middleware :as mw]
-            [org.httpkit.server :as server]
             [reitit.core :as re]
             [srvc.server.process :as process])
   (:import [java.io OutputStreamWriter PipedInputStream PipedOutputStream]))
@@ -170,15 +169,6 @@
       {:body event}
       not-found)))
 
-(defn hashes [request dtm]
-  (server/as-channel
-   request
-   {:on-open (fn [ch]
-               (server/send! ch {:status 200} false)
-               (doseq [{:keys [hash]} (:raw @dtm)]
-                 (server/send! ch (str (json/write-str hash) "\n") false))
-               (server/close ch))}))
-
 (defn doc-answers [request projects]
   (let [{:keys [id project-name]} (-> request ::re/match :path-params)
         {:keys [events]} (load-project projects project-name)
@@ -204,6 +194,5 @@
       ["/document" {:get #(get-documents % projects)}]
       ["/document/:id/label-answers" {:get #(doc-answers % projects)}]
       ["/hash/:id" {:get #(hash % projects)}]
-      ["/hashes" {:get #(hashes % projects)}]
       ["/recent-events" {:get #(get-recent-events % projects)}]
       ["/upload" {:post #(upload % projects)}]]]))
