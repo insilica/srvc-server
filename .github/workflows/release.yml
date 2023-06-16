@@ -57,7 +57,7 @@ jobs:
           ~/.gitlibs
           ~/.m2/repository
     - name: Install Nix
-      uses: cachix/install-nix-action@v18
+      uses: cachix/install-nix-action@v22
 
     - name: Cache Nix store
       id: nix-cache
