@@ -13,6 +13,8 @@
             [srvc.server.html :as html]
             [srvc.server.nrepl :as nrepl]
             [srvc.server.flow :as flow]
+            [srvc.server.postgres.client :as pg]
+            [srvc.server.postgres.server :as pgs]
             [srvc.server.saml :as saml])
   (:import [java.util Base64]))
 
@@ -123,6 +125,12 @@
                     :store (cookie/cookie-store {:key k})}))
         :stop (constantly nil)})
 
+(defn merge-config [& configs]
+  {::ds/config {:configs configs}
+   ::ds/start (fn [{{:keys [configs]} ::ds/config}]
+             (apply merge configs))
+   ::ds/stop (constantly nil)})
+
 (defn system [env]
   {::ds/defs
    {:srvc-server
@@ -141,6 +149,11 @@
                     :session-opts (ds/local-ref [:session-opts])})
      :nrepl-server (nrepl/nrepl-server-component
                     (ds/local-ref [:config :nrepl]))
+     :postgres (pg/component (ds/local-ref [:postgres-config]))
+     :postgres-config (merge-config
+                       (ds/local-ref [:config :postgres])
+                       {:server-dir (ds/local-ref [:postgres-server :dir])})
+     :postgres-server (pgs/component (ds/local-ref [:config :postgres-server]))
      :projects (projects-component)
      :proxy-server (flow/proxy-server-component
                     {:listen-ports (ds/local-ref [:config :proxy :listen-ports])
@@ -164,6 +177,9 @@
 
 (comment
   (do (stop!) (start!) nil)
+  (do (stop!) (reset! state nil) (start!) nil)
+  (-> @state ::ds/instances :srvc-server :postgres-config)
 
   ;; Generate a new session secret-key
-  (String. (.encode (Base64/getEncoder) ((requiring-resolve 'crypto.random/bytes) 16))))
+  (String. (.encode (Base64/getEncoder) ((requiring-resolve 'crypto.random/bytes) 16)))
+  )

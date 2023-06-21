@@ -41,6 +41,7 @@
             git
             jdk
             perl
+            postgresql
             rlwrap
             srvc.packages.${system}.default
           ];
