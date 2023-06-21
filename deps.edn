@@ -2,6 +2,7 @@
  :deps {org.clojure/clojure {:mvn/version "1.11.1"}
         babashka/process {:mvn/version "0.5.21"}
         buddy/buddy-hashers {:mvn/version "2.0.162"}
+        ch.qos.logback/logback-classic {:mvn/version "1.4.8"}
         cider/cider-nrepl {:mvn/version "0.30.0"}
         clj-commons/clj-yaml {:mvn/version "1.0.26"}
         co.insilica/hyperlight {:mvn/version "1.0.0"}
