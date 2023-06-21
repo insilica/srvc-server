@@ -1,6 +1,7 @@
 (ns srvc.server
   (:gen-class)
-  (:require [clojure.edn :as edn]
+  (:require [cognitect.aws.client.api :as aws]
+            [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [donut.system :as ds]
@@ -131,6 +132,16 @@
              (apply merge configs))
    ::ds/stop (constantly nil)})
 
+(defn aws-client [service]
+  {::ds/start (fn [{{:as instance :keys [client]} ::ds/instance}]
+                (if client
+                    instance
+                  (assoc instance :client (aws/client {:api service}))))
+   ::ds/stop (fn [{{:as instance :keys [client]} ::ds/instance}]
+               (if client
+                 (dissoc instance :client)
+                 instance))})
+
 (defn system [env]
   {::ds/defs
    {:srvc-server
@@ -146,7 +157,8 @@
                     :projects (ds/local-ref [:projects])
                     :proxy-config (ds/local-ref [:config :proxy])
                     :saml (ds/local-ref [:config :saml])
-                    :session-opts (ds/local-ref [:session-opts])})
+                    :session-opts (ds/local-ref [:session-opts])
+                    :sesv2 (ds/local-ref [:sesv2])})
      :nrepl-server (nrepl/nrepl-server-component
                     (ds/local-ref [:config :nrepl]))
      :postgres (pg/component (ds/local-ref [:postgres-config]))
@@ -160,7 +172,8 @@
                      :session-opts (ds/local-ref [:session-opts])})
      :flow-processes (flow/flow-processes-component)
      :session-opts (session-opts-component
-                    (ds/local-ref [:config :session]))}}})
+                    (ds/local-ref [:config :session]))
+     :sesv2 (aws-client "sesv2")}}})
 
 ;; Not thread-safe. For use by -main and at REPL
 (defn start! []
