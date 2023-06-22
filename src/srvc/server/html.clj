@@ -10,7 +10,8 @@
             [rum.core :as rum :refer [defc]]
             [srvc.server.account :as acct]
             [srvc.server.email :as email]
-            [srvc.server.flow :as flow]))
+            [srvc.server.flow :as flow]
+            [srvc.server.project :as proj]))
 
 (def re-project-name
   #"[A-Za-z](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}")
@@ -368,20 +369,34 @@
         (->> (str "https://")))
     git-remote))
 
-(defn get-project [request]
-  (let [{:keys [project-name username]} (-> request ::re/match :path-params)
+(defn get-project [{:as request :keys [config]}]
+  (let [{:keys [postgres]} config
+        {:keys [project-name username]} (-> request ::re/match :path-params)
         {:keys [status]
          {:keys [git]} :body}
         #__ (project-GET request username project-name)
-        git-origin (-> git :remotes :origin)]
+        git-origin (-> git :remotes :origin)
+        {:project/keys [id invite-code]} (proj/get-project! postgres username project-name [:project.id :invite-code])
+        invite-link (str "/p/" username "/" project-name "/invite?code=" invite-code)]
     (case status
       200 (response
            (body
             request
             [:div
+             [:h1.font-bold username " / " project-name]
              (when git-origin
-               [:a {:href (git-remote-link git-origin)}
-                "Git repository: " git-origin])]))
+               [:div.mt-3
+                [:a {:href (git-remote-link git-origin)}
+                 "Git repository: " git-origin]])
+             [:div.mt-3
+              [:h3.font-bold "Members"]
+              (->> (proj/get-project-members! postgres id [:account.username])
+                   (sort-by (comp str/lower-case :account/username))
+                   (map #(do [:li (:account/username %)]))
+                   (into [:ul]))
+              [:div.mt-3
+               "Project invite link: "
+               [:a {:href invite-link} invite-link]]]]))
       404 (not-found request)
       (server-error request))))
 
@@ -478,6 +493,24 @@
                      :target "_blank"}
                  "Open flow in new tab"]))
               (assoc :session (assoc session :flow-proxy-url proxy-url)))))))
+
+(defn invite [{:keys [config ::re/match params session]}]
+  (let [{:keys [postgres]} config
+        {:keys [project-name username]} (:path-params match)
+        {:strs [code]} params
+        {:keys [account-id]} session
+        {:project/keys [id invite-code]}
+        (when (and account-id (seq code))
+          (proj/get-project! postgres username project-name [:project.id :invite-code]))]
+    (cond
+      (not account-id) (message-page "Unauthorized" "Not logged in")
+      (not (seq code)) (message-page "Error" "Blank code")
+      (not= code invite-code) (message-page "Error" "Invalid or expired code")
+      :else
+      (do
+        (proj/add-member! postgres id account-id)
+        {:status 302
+         :headers {"Location" (str "/p/" username "/" project-name)}}))))
 
 (defn login [{:keys [params]} & [error]]
   ;; https://tailwindcomponents.com/component/login-showhide-password
@@ -830,7 +863,8 @@
        ["/activity" {:get (h #'activity)}]
        ["/documents" {:get (h #'documents)}]
        ["/flow" {:get (h #'get-flows)}]
-       ["/flow/:flow-name" {:get (h #'get-flow)}]]
+       ["/flow/:flow-name" {:get (h #'get-flow)}]
+       ["/invite" {:get (h #'invite)}]]
       ["hx"
        ["/validate/:form-id/:field-id"
         {:post (h #'hx-validate-form-field)}]

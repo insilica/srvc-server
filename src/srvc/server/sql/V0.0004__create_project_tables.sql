@@ -2,6 +2,7 @@ create table project (
   id serial primary key,
   account int not null references account (id),
   created timestamp with time zone not null default now(),
+  invite_code text,
   name text not null,
   public boolean not null default false
 );

@@ -39,21 +39,20 @@
         {:keys [account-id name]} body-params
         {:account/keys [username]} (acct/get-account! postgres account-id)
         sr-yaml (fs/path username name "sr.yaml")]
-    (if (fs/exists? sr-yaml)
-      (err "already-exists")
-      (do
-        (fs/create-dirs (fs/path username name))
-        (with-open [writer (io/writer (fs/file sr-yaml))]
-          (yaml/generate-stream
-           writer
-           {:db "sink.db"}
-           :dumper-options {:flow-style :block}))
-        (-> postgres
-            (pg/execute-one!
-             {:insert-into :project
-              :values [{:account account-id
-                        :name name}]}))
-        success))))
+    (when-not (fs/exists? sr-yaml)
+      (fs/create-dirs (fs/path username name))
+      (with-open [writer (io/writer (fs/file sr-yaml))]
+        (yaml/generate-stream
+         writer
+         {:db "sink.db"}
+         :dumper-options {:flow-style :block})))
+    (-> postgres
+        (pg/execute-one!
+         {:insert-into :project
+          :values [{:account account-id
+                    :invite-code (str (random-uuid))
+                    :name name}]}))
+    success))
 
 (defn realized-delay
   "Creates an already realized delay. Used when a value may be either a future
