@@ -29,10 +29,15 @@
           main-ns = "srvc.server";
           jdkRunner = pkgs.jdk17_headless;
         };
+        srvc-server-with-deps = symlinkJoin {
+          name = "srvc-server";
+          paths =
+            [ postgresql srvc.packages.${system}.default srvc-server-bin ];
+        };
       in {
         packages = {
-          inherit srvc-server-bin;
-          default = srvc-server-bin;
+          inherit srvc-server-bin srvc-server-with-deps;
+          default = srvc-server-with-deps;
         };
         devShells.default = mkShell {
           buildInputs = [
