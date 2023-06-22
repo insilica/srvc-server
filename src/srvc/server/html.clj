@@ -516,6 +516,10 @@
              "Log in"]
             [:div {:class "mt-3 flex justify-between"}
              [:span {:class "py-2 text-sm text-blue-600 leading-snug"}
+              [:a {:href "/register"}
+               "Create a new account"]]]
+            [:div {:class "mt-3 flex justify-between"}
+             [:span {:class "py-2 text-sm text-blue-600 leading-snug"}
               [:a {:href "/password-reset"}
                "Forgot your username or password?"]]]]]]]]]]])))
 
@@ -608,7 +612,11 @@
             [:div {:class "text-red-600 font-bold"}
              error]
             [:button {:class "mt-3 text-lg font-semibold bg-gray-800 w-full text-white rounded-lg px-6 py-3 block shadow-xl hover:text-white hover:bg-black"}
-             "Create account"]]]]]]]]])))
+             "Create account"]
+            [:div {:class "mt-3 flex justify-between"}
+             [:span {:class "py-2 text-sm text-blue-600 leading-snug"}
+              [:a {:href "/login"}
+               "Log in to an existing account"]]]]]]]]]]])))
 
 (defn POST-register [{:keys [config params session] :as request}]
   (let [{:keys [postgres]} config
