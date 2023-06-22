@@ -713,7 +713,7 @@
            (acct/create-password-reset-code! postgres id)))
         (message-page "Password Recovery" "Please check your email for a link to reset your password.")))))
 
-(defn password-reset-entry-page [{:keys [params]} username & [error]]
+(defn password-reset-entry-page [_ username & [error]]
   ;; https://tailwindcomponents.com/component/login-showhide-password
   (response
    (list
