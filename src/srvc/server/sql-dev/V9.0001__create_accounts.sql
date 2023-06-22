@@ -13,3 +13,21 @@ insert into account (buddy_hash, email, level, username, verified) values (
   'su',
   now()
 );
+
+insert into api_key (account, secret_key) values (
+  (select id from account where username = 'tester'),
+  'CNfHpzOYFWJgtUS/YOEoEs03f1ueiiac9r2i6LhDdz3r'
+), (
+  (select id from account where username = 'su'),
+  '9HimCb7l3b1mK8cqDdMsnDOrUipLfFc9JzNfOZeVUgtV'
+);
+
+insert into api_key_scope (api_key, level, scope) values (
+  (select id from api_key where account = (select id from account where username = 'tester')),
+  'write',
+  'root'
+), (
+  (select id from api_key where account = (select id from account where username = 'su')),
+  'write',
+  'root'
+);

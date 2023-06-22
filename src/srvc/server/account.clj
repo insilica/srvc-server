@@ -1,8 +1,11 @@
 (ns srvc.server.account
   (:require [buddy.hashers :as hashers]
             [clojure.string :as str]
+            [crypto.random :as random]
             [lambdaisland.regal :as regal]
-            [srvc.server.postgres.client :as pg]))
+            [next.jdbc :as jdbc]
+            [srvc.server.postgres.client :as pg])
+  (:import [java.util Base64]))
 
 (def re-email #"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
 
@@ -26,12 +29,31 @@
           :from :account
           :where [:= k v]}))))
 
+(defn random-secret-key []
+  (String. (.encode (Base64/getEncoder) (random/bytes 33))))
+
 (defn create-account! [postgres account]
-  (-> postgres
-      (pg/execute-one!
-       {:insert-into :account
-        :values [account]
-        :returning [:id]})))
+  (jdbc/with-transaction [tx postgres]
+    (let [{:account/keys [id]}
+          (-> tx
+              (pg/execute-one!
+               {:insert-into :account
+                :values [account]
+                :returning [:id]}))
+          {api-key-id :api-key/id}
+          (-> tx
+              (pg/execute-one!
+               {:insert-into :api-key
+                :values [{:account id
+                          :secret-key (random-secret-key)}]
+                :returning [:id]}))]
+      (-> tx
+          (pg/execute-one!
+           {:insert-into :api-key-scope
+            :values [{:api-key api-key-id
+                      :level "write"
+                      :scope "root"}]}))
+      id)))
 
 (defn set-password! [postgres account-id password]
   (-> postgres
@@ -60,3 +82,15 @@
         :where [:and
                 [:= :password-reset-code (str/lower-case code)]
                 [:> :password-reset-code-expires [:now]]]})))
+
+(defn get-root-key! [postgres account-id]
+  (-> postgres
+      (pg/execute-one!
+       {:select [:secret-key]
+        :from :api-key
+        :join [:api-key-scope [:= :api-key.id :api-key-scope.api-key]]
+        :where [:and
+                [:= :account account-id]
+                [:= :level "write"]
+                [:= :scope "root"]]})
+      :api-key/secret-key))
