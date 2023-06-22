@@ -43,36 +43,12 @@
 (defn get-projects [request]
   (:projects (json-get request "/project")))
 
-(defn project-GET [request project-name & [path]]
+(defn project-GET [request username project-name & [path]]
   (-> (hc/get
-       (api-url request (str "/project/" project-name path))
+       (api-url request (str "/project/" username "/" project-name path))
        {:as :stream
         :http-client (-> request :config :hato :client)})
       parse-json-body))
-
-(defn create-project [request name]
-  (let [{:keys [status] :as response}
-        (hc/post
-         (api-url request "/project")
-         {:as :stream
-          :body (json/write-str {:name name})
-          :headers {"Accept" "application/json"
-                    "Content-Type" "application/json"}
-          :http-client (-> request :config :hato :client)})]
-    (when-not (and status (<= 200 status 299))
-      (throw (ex-info "Unexpected response" {:response response})))))
-
-(defn project-POST [request project-name path body]
-  (let [{:keys [status] :as response}
-        (hc/post
-         (api-url request (str "/project/" project-name path))
-         {:as :stream
-          :body (json/write-str body)
-          :headers {"Accept" "application/json"
-                    "Content-Type" "application/json"}
-          :http-client (-> request :config :hato :client)})]
-    (when-not (and status (<= 200 status 299))
-      (throw (ex-info "Unexpected response" {:response response})))))
 
 (defc head []
   [:head
@@ -92,9 +68,9 @@
    :body (list "<!doctype html>" (rum/render-static-markup (page body)))})
 
 (defc body [{:keys [::re/match session] :as request} & content]
-  (let [{:keys [project-name]} (:path-params match)
+  (let [{:keys [project-name username]} (:path-params match)
         {:keys [email]} session
-        project-url #(str "/p/" project-name %)]
+        project-url #(str "/p/" username "/" project-name %)]
     [:body {:class "bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-slate-100"}
      [:div {:class "flex h-screen"}
       [:div {:class "h-screen w-64 pl-4 pt-4 text-lg text-slate-100 bg-slate-900"}
@@ -165,6 +141,25 @@
     (table-head col-names)
     (table-body rows)]])
 
+(defn message-page [title message]
+  (response
+   (list
+    [:script {:defer true
+              :src "/js/alpine2.js"}]
+    [:div {:class "container max-w-full mx-auto py-24 px-6"}
+     [:div.font-sans
+      [:div {:class "max-w-sm mx-auto px-6"}
+       [:div {:class "relative flex flex-wrap"}
+        [:div {:class "w-full relative"}
+         [:div.mt-6
+          [:div {:class "text-center font-semibold text-black"}
+           title]
+          [:div.mx-auto.max-w-lg.mt-3
+           message]
+          [:div.mx-auto.max-w-lg.mt-3
+           [:a.text-blue-600 {:href "/"}
+            "Return to srvc"]]]]]]]])))
+
 (defn validate-project-name [request _form _field name]
   (let [name (some-> name str/trim)
         err #(do {:error %
@@ -231,16 +226,52 @@
        (map (juxt :id identity))
        (into {})))
 
-(defn home [{:keys [form-params] :as request}]
-  (let [projects (get-projects request)
+(defn create-project [{:as request :keys [config session]} name]
+  (let [{:keys [account-id]} session
+        {:keys [hato postgres]} config]
+    (if-not account-id
+      (message-page "Unauthenticated" "You must be logged in to create a project")
+      (let [api-key (acct/get-root-key! postgres account-id)
+            {:keys [status] :as response}
+            (hc/post
+             (api-url request "/project")
+             {:as :stream
+              :body (json/write-str {:account-id account-id :name name})
+              :headers {"Accept" "application/json"
+                        "Authorization" (str "Bearer " api-key)
+                        "Content-Type" "application/json"}
+              :http-client (:client hato)})]
+        (if (and status (<= 200 status 299))
+          (redirect-after-post "/")
+          (throw (ex-info "Unexpected response" {:response response})))))))
+
+(defn project-POST [request project-name path body]
+  (let [{:keys [status] :as response}
+        (hc/post
+         (api-url request (str "/project/" project-name path))
+         {:as :stream
+          :body (json/write-str body)
+          :headers {"Accept" "application/json"
+                    "Content-Type" "application/json"}
+          :http-client (-> request :config :hato :client)})]
+    (when-not (and status (<= 200 status 299))
+      (throw (ex-info "Unexpected response" {:response response})))))
+
+(defn home [{:keys [form-params session] :as request}]
+  (let [{:keys [account-id]} session
+        projects (get-projects request)
         validations (when (seq form-params)
                       (validate-form request create-project-form))]
     (response
      (body
       request
       [:div
-       [:h2.text-lg.font-bold "Create Project"]
-       (form request create-project-form validations)
+       (if account-id
+         [:<>
+          [:h2.text-lg.font-bold "Create Project"]
+          (form request create-project-form validations)]
+         [:h2.text-lg.font-bold
+          [:a {:href "/login"} "Create Project"]])
        (when (seq projects)
          [:div.mt-4
           [:h2.text-lg.font-bold "Projects"]
@@ -252,8 +283,7 @@
 (defn POST-home [request]
   (let [validations (validate-form request create-project-form)]
     (if (every? :valid? (vals validations))
-      (do (create-project request (-> validations (get "project-name") :value))
-          (redirect-after-post "/"))
+      (create-project request (-> validations (get "project-name") :value))
       (home request))))
 
 (defn doc-title [{:keys [data hash type uri]}]
@@ -262,8 +292,8 @@
       (str type " " hash)))
 
 (defn documents [request]
-  (let [{:keys [project-name]} (-> request ::re/match :path-params)
-        {:keys [status] documents :body} (project-GET request project-name "/document")]
+  (let [{:keys [project-name username]} (-> request ::re/match :path-params)
+        {:keys [status] documents :body} (project-GET request username project-name "/document")]
     (case status
       200 (response
            (body
@@ -289,8 +319,8 @@
   (some-> user-uri uri/uri (assoc :scheme nil) str))
 
 (defn recent-event-seq [request]
-  (let [{:keys [project-name]} (-> request ::re/match :path-params)
-        recent-events (json-get request (str "/project/" project-name "/recent-events"))]
+  (let [{:keys [project-name username]} (-> request ::re/match :path-params)
+        recent-events (json-get request (str "/project/" username "/" project-name "/recent-events"))]
     (distinct
      (for [{:keys [data type] :as event} recent-events]
        [(case type
@@ -312,13 +342,13 @@
           (take 10 (recent-event-seq request)))])
 
 (defn activity [request]
-  (let [{:keys [project-name]} (-> request ::re/match :path-params)
-        {:keys [status]} (project-GET request project-name "/recent-events")]
+  (let [{:keys [project-name username]} (-> request ::re/match :path-params)
+        {:keys [status]} (project-GET request username project-name "/recent-events")]
     (case status
       200 (response
            (body
             request
-            [:div {:hx-get (str "/hx/" project-name "/activity")
+            [:div {:hx-get (str "/hx/project/" username "/" project-name "/activity")
                    :hx-trigger "every 1s"}
              (activity-table request)]))
       404 (not-found request)
@@ -339,10 +369,10 @@
     git-remote))
 
 (defn get-project [request]
-  (let [{:keys [project-name]} (-> request ::re/match :path-params)
+  (let [{:keys [project-name username]} (-> request ::re/match :path-params)
         {:keys [status]
          {:keys [git]} :body}
-        #__ (project-GET request project-name)
+        #__ (project-GET request username project-name)
         git-origin (-> git :remotes :origin)]
     (case status
       200 (response
@@ -399,8 +429,8 @@
        process))))
 
 (defn get-flows [request]
-  (let [{:keys [project-name]} (-> request ::re/match :path-params)
-        resp (project-GET request project-name)]
+  (let [{:keys [project-name username]} (-> request ::re/match :path-params)
+        resp (project-GET request username project-name)]
     (case (:status resp)
       404 (not-found request)
       200 (response
@@ -420,8 +450,8 @@
 
 (defn get-flow [{:keys [config ::re/match scheme session] :as request}]
   (let [{:keys [flow-processes proxy-config]} config
-        {:keys [flow-name project-name]} (:path-params match)
-        {:keys [status] :as resp} (project-GET request project-name)
+        {:keys [flow-name project-name username]} (:path-params match)
+        {:keys [status] :as resp} (project-GET request username project-name)
         flow (-> resp :body :config :flows (get (keyword flow-name)))]
     (cond
       (not (:account-id session)) {:status 302
@@ -688,25 +718,6 @@
             [:button {:class "mt-3 text-lg font-semibold bg-gray-800 w-full text-white rounded-lg px-6 py-3 block shadow-xl hover:text-white hover:bg-black"}
              "Reset password"]]]]]]]]])))
 
-(defn message-page [title message]
-  (response
-   (list
-    [:script {:defer true
-              :src "/js/alpine2.js"}]
-    [:div {:class "container max-w-full mx-auto py-24 px-6"}
-     [:div.font-sans
-      [:div {:class "max-w-sm mx-auto px-6"}
-       [:div {:class "relative flex flex-wrap"}
-        [:div {:class "w-full relative"}
-         [:div.mt-6
-          [:div {:class "text-center font-semibold text-black"}
-           title]
-          [:div.mx-auto.max-w-lg.mt-3
-           message]
-          [:div.mx-auto.max-w-lg.mt-3
-           [:a.text-blue-600 {:href "/"}
-            "Return to srvc"]]]]]]]])))
-
 (defn POST-password-reset [{:keys [config params] :as request}]
   (let [{:keys [postgres sesv2]} config
         {:strs [username]} params
@@ -814,7 +825,7 @@
                                :post (h #'POST-password-reset-entry)}]
       ["register" {:get (h #'register)
                    :post (h #'POST-register)}]
-      ["p/:project-name"
+      ["p/:username/:project-name"
        ["" {:get (h #'get-project)}]
        ["/activity" {:get (h #'activity)}]
        ["/documents" {:get (h #'documents)}]
@@ -823,5 +834,5 @@
       ["hx"
        ["/validate/:form-id/:field-id"
         {:post (h #'hx-validate-form-field)}]
-       ["/:project-name"
+       ["/project/:username/:project-name"
         ["/activity" {:get (h #'hx-activity)}]]]]]))

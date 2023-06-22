@@ -7,6 +7,8 @@
             [clojure.string :as str]
             [muuntaja.middleware :as mw]
             [reitit.core :as re]
+            [srvc.server.account :as acct]
+            [srvc.server.postgres.client :as pg]
             [srvc.server.process :as process])
   (:import [java.io OutputStreamWriter PipedInputStream PipedOutputStream]))
 
@@ -20,26 +22,37 @@
 (def success
   {:body {:success true}})
 
-(defn get-projects [_request]
-  (let [projects-dir (fs/real-path (fs/path "."))
-        projects (->> (fs/list-dir projects-dir)
-                      (keep #(when (fs/exists? (fs/path % "sr.yaml"))
-                               (str (fs/relativize projects-dir %))))
-                      (sort-by str/lower-case))]
+(defn get-projects [{:keys [config]}]
+  (let [{:keys [postgres]} config
+        projects (-> postgres
+                     (pg/execute!
+                      {:select [:name :username]
+                       :from :project
+                       :join [:account [:= :account.id :project.account]]})
+                     (->>
+                      (map #(str (:account/username %) "/" (:project/name %)))
+                      (sort-by str/lower-case)))]
     {:body {:projects projects}}))
 
-(defn POST-project [{:keys [body-params]}]
-  (let [{:keys [name]} body-params
-        sr-yaml (fs/path name "sr.yaml")]
+(defn POST-project [{:keys [body-params config]}]
+  (let [{:keys [postgres]} config
+        {:keys [account-id name]} body-params
+        {:account/keys [username]} (acct/get-account! postgres account-id)
+        sr-yaml (fs/path username name "sr.yaml")]
     (if (fs/exists? sr-yaml)
       (err "already-exists")
       (do
-        (fs/create-dirs (fs/path name))
+        (fs/create-dirs (fs/path username name))
         (with-open [writer (io/writer (fs/file sr-yaml))]
           (yaml/generate-stream
            writer
            {:db "sink.db"}
            :dumper-options {:flow-style :block}))
+        (-> postgres
+            (pg/execute-one!
+             {:insert-into :project
+              :values [{:account account-id
+                        :name name}]}))
         success))))
 
 (defn realized-delay
@@ -64,9 +77,9 @@
          (update-in [:doc-to-answers (-> item :data :document)]
                     (fnil conj []) item))))))
 
-(defn load-data [project-name source]
+(defn load-data [project-dir source]
   (let [items (->> (process/process
-                    {:dir project-name
+                    {:dir project-dir
                      :err :inherit
                      :out :stream}
                     "sr" "pull" "--db" "-" source)
@@ -75,20 +88,20 @@
                             (json/read-str % :key-fn keyword))))]
     (reduce add-data (delay {}) items)))
 
-(defn sink-process [project-name]
+(defn sink-process [project-dir]
   (let [out (PipedOutputStream.)]
     (-> (process/process
-         {:dir project-name
+         {:dir project-dir
           :err :inherit
           :in (PipedInputStream. out)
           :out :inherit}
          "sr" "pull" "-")
         (assoc :writer (OutputStreamWriter. out)))))
 
-(defn git-origin [project-name]
+(defn git-origin [project-dir]
   (let [{:keys [exit out]} (try
                              @(process/process
-                               {:dir project-name
+                               {:dir project-dir
                                 :err :string
                                 :out :string}
                                "git" "remote" "get-url" "origin")
@@ -96,11 +109,11 @@
     (when (some-> exit zero?)
       (str/trim out))))
 
-(defn get-full-config [project-name]
-  (let [config-file (fs/path project-name "sr.yaml")]
+(defn get-full-config [project-dir]
+  (let [config-file (fs/file (fs/path project-dir "sr.yaml"))]
     (when (fs/exists? config-file)
       (let [{:keys [exit out] :as p} @(process/process
-                                       {:dir project-name
+                                       {:dir project-dir
                                         :err :string
                                         :out :string}
                                        "sr" "print-config")]
@@ -109,32 +122,33 @@
           (throw (ex-info (str "sr exited with code " exit)
                           {:process p})))))))
 
-(defn load-project [projects name]
+(defn load-project [{{:keys [projects]} :config} username project-name]
   (or
-   (get @projects name)
-   (let [config-file (fs/path name "sr.yaml")]
+   (get-in @projects [username project-name])
+   (let [project-dir (fs/file (fs/path username project-name))
+         config-file (fs/file (fs/path project-dir "sr.yaml"))]
      (when (fs/exists? config-file)
-       (let [{:keys [db] :as config} (get-full-config name)
+       (let [{:keys [db] :as config} (get-full-config project-dir)
              project {:config config
                       :config-file config-file
-                      :events (future @(load-data name db))
+                      :events (future @(load-data project-dir db))
                       :git
                       {:remotes
-                       {:origin (git-origin name)}}
-                      :sink-process (sink-process name)}]
-         (swap! projects assoc name project)
+                       {:origin (git-origin project-dir)}}
+                      :sink-process (sink-process project-dir)}]
+         (swap! projects assoc-in [username project-name] project)
          project)))))
 
-(defn get-project [request projects]
-  (let [{:keys [project-name]} (-> request ::re/match :path-params)
-        project (load-project projects project-name)]
+(defn get-project [{:as request :keys [::re/match]}]
+  (let [{:keys [project-name username]} (:path-params match)
+        project (load-project request username project-name)]
     (if-not project
       not-found
       {:status 200
        :body (select-keys project [:config :git])})))
 
-(defn add-events! [projects name events]
-  (let [{:keys [sink-process] :as project} (load-project projects name)
+(defn add-events! [{:as request :keys [projects]} username project-name events]
+  (let [{:keys [sink-process] :as project} (load-project request username project-name)
         {:keys [writer]} sink-process]
     (doseq [{:keys [hash] :as item} events]
       (when-not (get-in project [:events :by-hash hash])
@@ -143,56 +157,60 @@
         (.flush writer)
         (swap! projects update-in [name :events] add-data item)))))
 
-(defn get-documents [request projects]
-  (let [{:keys [project-name]} (-> request ::re/match :path-params)
-        {:keys [events] :as project} (load-project projects project-name)]
+(defn get-documents [request]
+  (let [{:keys [project-name username]} (-> request ::re/match :path-params)
+        {:keys [events] :as project} (load-project request username project-name)]
     (if-not project
       not-found
       {:status 200
        :body (->> @events :raw
                   (filter (comp #{"document"} :type)))})))
 
-(defn get-recent-events [request projects]
-  (let [{:keys [project-name]} (-> request ::re/match :path-params)
-        {:keys [events] :as project} (load-project projects project-name)
+(defn get-recent-events [request]
+  (let [{:keys [project-name username]} (-> request ::re/match :path-params)
+        {:keys [events] :as project} (load-project request username project-name)
         recent-events (some->> events deref :raw rseq (take 100))]
     (if-not project
       not-found
       {:status 200
        :body (vec recent-events)})))
 
-(defn hash [request projects]
-  (let [{:keys [id project-name]} (-> request ::re/match :path-params)
-        {:keys [events]} (load-project projects project-name)
+(defn hash [request]
+  (let [{:keys [id project-name username]} (-> request ::re/match :path-params)
+        {:keys [events]} (load-project request username project-name)
         event (get (:by-hash @events) id)]
     (if event
       {:body event}
       not-found)))
 
-(defn doc-answers [request projects]
-  (let [{:keys [id project-name]} (-> request ::re/match :path-params)
-        {:keys [events]} (load-project projects project-name)
+(defn doc-answers [request]
+  (let [{:keys [id project-name username]} (-> request ::re/match :path-params)
+        {:keys [events]} (load-project request username project-name)
         event (get (:by-hash @events) id)]
     (when event
       {:body (-> @events :doc-to-answers (get id))})))
 
-(defn upload [request projects]
-  (let [{:keys [project-name]} (-> request ::re/match :path-params)]
+(defn upload [request]
+  (let [{:keys [project-name username]} (-> request ::re/match :path-params)]
     (some->> request :body-params
-             (add-events! projects project-name)))
+             (add-events! request username project-name)))
   success)
 
-(defn routes [{:keys [projects]}]
+(defn routes [{:as config}]
   (let [;; Allow hot-reloading in dev when handler is a var.
         ;; reitit does not natively understand vars.
-        h (fn [handler] (fn [request] (handler request)))]
+        h (fn [handler]
+            (fn [request]
+              (-> request
+                  (assoc :config config)
+                  handler)))]
     ["/api/v1" {:middleware [mw/wrap-format]}
      ["/project" {:get (h #'get-projects)
                   :post (h #'POST-project)}]
-     ["/project/:project-name"
-      ["" {:get #(get-project % projects)}]
-      ["/document" {:get #(get-documents % projects)}]
-      ["/document/:id/label-answers" {:get #(doc-answers % projects)}]
-      ["/hash/:id" {:get #(hash % projects)}]
-      ["/recent-events" {:get #(get-recent-events % projects)}]
-      ["/upload" {:post #(upload % projects)}]]]))
+     ["/project/:username/:project-name"
+      ["" {:get (h #'get-project)}]
+      ["/document" {:get (h #'get-documents)}]
+      ["/document/:id/label-answers" {:get (h #'doc-answers)}]
+      ["/hash/:id" {:get (h #'hash)}]
+      ["/recent-events" {:get (h #'get-recent-events)}]
+      ["/upload" {:post (h #'upload)}]]]))
