@@ -30,7 +30,8 @@
   (-> postgres
       (pg/execute-one!
        {:insert-into :account
-        :values [account]})))
+        :values [account]
+        :returning [:id]})))
 
 (defn set-password! [postgres account-id password]
   (-> postgres

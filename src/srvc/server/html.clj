@@ -424,8 +424,8 @@
         {:keys [status] :as resp} (project-GET request project-name)
         flow (-> resp :body :config :flows (get (keyword flow-name)))]
     (cond
-      (not (:email session)) {:status 302
-                              :headers {"Location" "/login"}}
+      (not (:account-id session)) {:status 302
+                                   :headers {"Location" "/login"}}
       (or (= 404 status) (not flow)) (not-found request)
       (not= 200 status) (server-error request)
       :else
@@ -525,13 +525,13 @@
         username (some-> username str/trim str/lower-case)]
     (if-not (seq username)
       (login request)
-      (let [{:account/keys [buddy-hash email]}
-            (acct/get-account! postgres username [:buddy-hash :email])]
+      (let [{:account/keys [buddy-hash email id]}
+            (acct/get-account! postgres username [:buddy-hash :email :id])]
         (cond
           (and buddy-hash (:valid (hashers/verify password buddy-hash)))
           {:status 302
            :headers {"Location" "/"}
-           :session (assoc session :email email)}
+           :session (assoc session :account-id id :email email)}
           :else
           (login request "Wrong username, email or password"))))))
 
@@ -644,11 +644,11 @@
       (let [acct {:buddy-hash (hashers/derive password)
                   :email email
                   :username username
-                  :verification-code (str (random-uuid))}]
-        (acct/create-account! postgres acct)
+                  :verification-code (str (random-uuid))}
+            {:account/keys [id]} (acct/create-account! postgres acct)]
         {:status 302
          :headers {"Location" "/"}
-         :session (assoc session :email email)}))))
+         :session (assoc session :account-id id :email email)}))))
 
 (defn password-reset [{:keys [params]} & [error]]
   ;; https://tailwindcomponents.com/component/login-showhide-password
@@ -783,7 +783,7 @@
 (defn logout [{:keys [session]}]
   {:status 302
    :headers {"Location" "/"}
-   :session (dissoc session :email)})
+   :session (dissoc session :account-id :email)})
 
 (defn routes [config]
   (let [;; Allow hot-reloading in dev when handler is a var.
