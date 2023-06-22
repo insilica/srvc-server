@@ -3,7 +3,7 @@
  :postgres
  {:create-if-not-exists? true
   :dbname "srvc"
-  :flyway-locations ["classpath:/srvc/server/sql"]
+  :flyway-locations ["classpath:/srvc/server/sql" "classpath:/srvc/server/sql-dev"]
   :host "localhost"
   :port :none
   :socketFactory "org.newsclub.net.unix.AFUNIXSocketFactory$FactoryArg"
