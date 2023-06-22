@@ -22,6 +22,7 @@
     flake-utils.lib.eachDefaultSystem (system:
       with import nixpkgs { inherit system; };
       let
+        pg = postgresql_15;
         cljpkgs = clj-nix.packages."${system}";
         srvc-server-bin = cljpkgs.mkCljBin {
           projectSrc = ./.;
@@ -32,7 +33,7 @@
         srvc-server-with-deps = symlinkJoin {
           name = "srvc-server";
           paths =
-            [ postgresql srvc.packages.${system}.default srvc-server-bin ];
+            [ pg srvc.packages.${system}.default srvc-server-bin ];
         };
       in {
         packages = {
@@ -46,7 +47,7 @@
             git
             jdk
             perl
-            postgresql
+            pg
             rlwrap
             srvc.packages.${system}.default
           ];
